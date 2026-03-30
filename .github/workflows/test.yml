@@ -1,0 +1,23 @@
+name: Test Action
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Utensil Action
+        uses: ./
+        with:
+          license-token: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
+          fail-on: critical
+          github-comment: 'false'
