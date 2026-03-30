@@ -35,10 +35,6 @@ inputs:
     description: 'Ingest endpoint URL'
     required: false
     default: 'https://api.utensil.tools/api/ingest'
-  cli-version:
-    description: 'CLI version to use (tag name or "latest")'
-    required: false
-    default: 'latest'
   args:
     description: 'Additional CLI arguments (pass-through)'
     required: false
@@ -63,14 +59,8 @@ runs:
     - name: Download Utensil CLI
       shell: bash
       run: |
-        VERSION="${{ inputs.cli-version }}"
-        if [ "$VERSION" = "latest" ]; then
-          VERSION=$(curl -sL -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/wbraynen/Utensil-releases/releases/latest \
-            | jq -r .tag_name)
-        fi
-        echo "Downloading Utensil $VERSION for linux-x64..."
-        curl -fSL "https://github.com/wbraynen/Utensil-releases/releases/download/${VERSION}/Utensil-${VERSION}-linux-x64.tar.gz" \
+        echo "Downloading Utensil CLI for linux-x64..."
+        curl -fSL "https://desktop.utensil.tools/Utensil-latest-linux-x64.tar.gz" \
           -o /tmp/utensil.tar.gz
         tar -xzf /tmp/utensil.tar.gz -C /tmp
         chmod +x /tmp/utensil
