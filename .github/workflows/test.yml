@@ -15,14 +15,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Require Utensil license token
+        env:
+          UTENSIL_LICENSE_TOKEN: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
+        run: |
+          if [ -z "$UTENSIL_LICENSE_TOKEN" ]; then
+            echo "::error::UTENSIL_LICENSE_TOKEN is not configured for this repository."
+            exit 1
+          fi
+
       - name: Run Utensil Action
-        if: ${{ secrets.UTENSIL_LICENSE_TOKEN != '' }}
         uses: ./
         with:
           license-token: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
           fail-on: critical
           github-comment: 'false'
-
-      - name: Skip when license token is unavailable
-        if: ${{ secrets.UTENSIL_LICENSE_TOKEN == '' }}
-        run: echo "Skipping action test because UTENSIL_LICENSE_TOKEN is unavailable in this workflow context."
