@@ -125,14 +125,31 @@ runs:
       run: |
         REPORT="${{ steps.scan.outputs.report-path }}"
         if [ ! -f "$REPORT" ]; then exit 0; fi
+        PAYLOAD="${{ runner.temp }}/utensil-upload.json"
+        RESPONSE_PATH="${{ runner.temp }}/utensil-upload-response.txt"
         jq --arg repo "${{ github.repository }}" \
            --arg ref "${{ github.ref }}" \
            --arg sha "${{ github.sha }}" \
            --arg run_id "${{ github.run_id }}" \
            --arg trigger "${{ github.event_name }}" \
            '{metadata: {repo: $repo, ref: $ref, sha: $sha, run_id: $run_id, trigger: $trigger, uploaded_at: (now | todate)}, report: .}' \
-           "$REPORT" | \
-        curl -fsSL -X POST "${{ inputs.upload-url }}" \
+           "$REPORT" > "$PAYLOAD"
+
+        HTTP_CODE=$(curl -sS -o "$RESPONSE_PATH" -w "%{http_code}" \
+          -X POST "${{ inputs.upload-url }}" \
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $UTENSIL_LICENSE_TOKEN" \
-          --data-binary @-
+          --data-binary @"$PAYLOAD")
+        CURL_EXIT=$?
+
+        if [ $CURL_EXIT -ne 0 ] || [ -z "$HTTP_CODE" ]; then
+          HTTP_CODE=000
+        fi
+
+        if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+          echo "::warning::Utensil dashboard upload skipped (${HTTP_CODE}) via ${{ inputs.upload-url }}"
+          if [ -s "$RESPONSE_PATH" ]; then
+            head -c 500 "$RESPONSE_PATH"
+            echo
+          fi
+        fi
