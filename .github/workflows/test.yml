@@ -12,10 +12,13 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    env:
+      CAN_RUN_LICENSED_TEST: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Require Utensil license token
+        if: ${{ env.CAN_RUN_LICENSED_TEST == 'true' }}
         env:
           UTENSIL_LICENSE_TOKEN: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
         run: |
@@ -25,8 +28,13 @@ jobs:
           fi
 
       - name: Run Utensil Action
+        if: ${{ env.CAN_RUN_LICENSED_TEST == 'true' }}
         uses: ./
         with:
           license-token: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
           fail-on: critical
           github-comment: 'false'
+
+      - name: Skip licensed test for forked pull requests
+        if: ${{ env.CAN_RUN_LICENSED_TEST != 'true' }}
+        run: echo "Skipping licensed integration test for forked pull requests because repository secrets are unavailable."
