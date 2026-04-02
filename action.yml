@@ -50,8 +50,17 @@ outputs:
     description: 'Total vulnerability count'
     value: ${{ steps.parse.outputs.vuln-count }}
   finding-count:
-    description: 'Total security finding count'
+    description: 'Total reported security finding count'
     value: ${{ steps.parse.outputs.finding-count }}
+  reported-finding-count:
+    description: 'Total reported security finding count for the run snapshot'
+    value: ${{ steps.parse.outputs.reported-finding-count }}
+  active-finding-count:
+    description: 'Active security finding count for the run snapshot'
+    value: ${{ steps.parse.outputs.active-finding-count }}
+  dismissed-finding-count:
+    description: 'Dismissed security finding count for the run snapshot'
+    value: ${{ steps.parse.outputs.dismissed-finding-count }}
 
 runs:
   using: 'composite'
@@ -109,12 +118,52 @@ runs:
         REPORT="${{ steps.scan.outputs.report-path }}"
         if [ -f "$REPORT" ]; then
           VULN_COUNT=$(jq '[.vulnerabilities.vulnerablePackages[]?.totalCount // 0] | add // 0' "$REPORT" 2>/dev/null || echo 0)
-          FINDING_COUNT=$(jq '[.intelligence[]? | select(.category == "securityRisk" and (.key | endswith("Summary") | not))] | length' "$REPORT" 2>/dev/null || echo 0)
+          COUNT_FILTER='
+            def security_findings:
+              [.intelligence[]?
+                | select(.category == "securityRisk" and ((.key // "") | endswith("Summary") | not))
+              ];
+            def run_summary:
+              .runSummary // .summary // {};
+            def dismissed_flag:
+              .dismissedAtScanTime // .dismissed // .isDismissed // false;
+            def reported_count:
+              if (run_summary.reportedFindingCount? != null) then run_summary.reportedFindingCount
+              elif (run_summary.findingCount? != null) then run_summary.findingCount
+              else (security_findings | length)
+              end;
+            def dismissed_count:
+              if (run_summary.dismissedFindingCount? != null) then run_summary.dismissedFindingCount
+              else ([security_findings[] | select(dismissed_flag == true)] | length)
+              end;
+            def active_count:
+              if (run_summary.activeFindingCount? != null) then run_summary.activeFindingCount
+              elif (run_summary.findingCount? != null and run_summary.dismissedFindingCount? != null) then
+                (run_summary.findingCount - run_summary.dismissedFindingCount)
+              else (reported_count - dismissed_count)
+              end;
+            {
+              reported: (reported_count // 0),
+              active: (active_count // 0),
+              dismissed: (dismissed_count // 0)
+            }
+          '
+          COUNT_JSON=$(jq -c "$COUNT_FILTER" "$REPORT" 2>/dev/null || echo '{"reported":0,"active":0,"dismissed":0}')
+          REPORTED_FINDING_COUNT=$(jq -r '.reported // 0' <<< "$COUNT_JSON")
+          ACTIVE_FINDING_COUNT=$(jq -r '.active // 0' <<< "$COUNT_JSON")
+          DISMISSED_FINDING_COUNT=$(jq -r '.dismissed // 0' <<< "$COUNT_JSON")
+          FINDING_COUNT="$REPORTED_FINDING_COUNT"
           echo "vuln-count=$VULN_COUNT" >> $GITHUB_OUTPUT
           echo "finding-count=$FINDING_COUNT" >> $GITHUB_OUTPUT
+          echo "reported-finding-count=$REPORTED_FINDING_COUNT" >> $GITHUB_OUTPUT
+          echo "active-finding-count=$ACTIVE_FINDING_COUNT" >> $GITHUB_OUTPUT
+          echo "dismissed-finding-count=$DISMISSED_FINDING_COUNT" >> $GITHUB_OUTPUT
         else
           echo "vuln-count=0" >> $GITHUB_OUTPUT
           echo "finding-count=0" >> $GITHUB_OUTPUT
+          echo "reported-finding-count=0" >> $GITHUB_OUTPUT
+          echo "active-finding-count=0" >> $GITHUB_OUTPUT
+          echo "dismissed-finding-count=0" >> $GITHUB_OUTPUT
         fi
 
     - name: Upload results
@@ -132,7 +181,60 @@ runs:
            --arg sha "${{ github.sha }}" \
            --arg run_id "${{ github.run_id }}" \
            --arg trigger "${{ github.event_name }}" \
-           '{metadata: {repo: $repo, ref: $ref, sha: $sha, run_id: $run_id, trigger: $trigger, uploaded_at: (now | todate)}, report: .}' \
+           '
+           def security_findings:
+             [.intelligence[]?
+               | select(.category == "securityRisk" and ((.key // "") | endswith("Summary") | not))
+             ];
+           def run_summary:
+             .runSummary // .summary // {};
+           def dismissed_flag:
+             .dismissedAtScanTime // .dismissed // .isDismissed // false;
+           def finding_identity:
+             {
+               ruleId: (.ruleId // .ruleIdentifier // .rule // .key // null),
+               filePath: (.filePath // .path // .location.path // .location.file // null),
+               lineNumber: (.lineNumber // .line // .location.line // null)
+             };
+           def finding_audit:
+             finding_identity + {
+               dismissedAtScanTime: dismissed_flag,
+               dismissalReason: (.dismissalReason // .suppression.reason // .review.reason // null),
+               dismissedBy: (.dismissedBy // .suppression.actor // .review.actor // null),
+               dismissedAt: (.dismissedAt // .suppression.timestamp // .review.timestamp // null)
+             };
+           def reported_count:
+             if (run_summary.reportedFindingCount? != null) then run_summary.reportedFindingCount
+             elif (run_summary.findingCount? != null) then run_summary.findingCount
+             else (security_findings | length)
+             end;
+           def dismissed_count:
+             if (run_summary.dismissedFindingCount? != null) then run_summary.dismissedFindingCount
+             else ([security_findings[] | select(dismissed_flag == true)] | length)
+             end;
+           def active_count:
+             if (run_summary.activeFindingCount? != null) then run_summary.activeFindingCount
+             elif (run_summary.findingCount? != null and run_summary.dismissedFindingCount? != null) then
+               (run_summary.findingCount - run_summary.dismissedFindingCount)
+             else (reported_count - dismissed_count)
+             end;
+           {
+             metadata: {
+               repo: $repo,
+               ref: $ref,
+               sha: $sha,
+               run_id: $run_id,
+               trigger: $trigger,
+               uploaded_at: (now | todate)
+             },
+             runSummary: {
+               reportedFindingCount: (reported_count // 0),
+               activeFindingCount: (active_count // 0),
+               dismissedFindingCount: (dismissed_count // 0)
+             },
+             findings: [security_findings[] | finding_audit],
+             report: .
+           }' \
            "$REPORT" > "$PAYLOAD"
 
         HTTP_CODE=$(curl -sS -o "$RESPONSE_PATH" -w "%{http_code}" \
