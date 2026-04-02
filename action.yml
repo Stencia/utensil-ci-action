@@ -35,6 +35,10 @@ inputs:
     description: 'Ingest endpoint URL'
     required: false
     default: 'https://api.utensil.tools/api/ingest'
+  diff-only:
+    description: 'Only report findings on files changed in this PR. Auto-enabled on pull_request events. Set to false to see all findings.'
+    required: false
+    default: 'auto'
   args:
     description: 'Additional CLI arguments (pass-through)'
     required: false
@@ -80,6 +84,24 @@ runs:
           PR_NUMBER="${{ github.event.pull_request.number }}"
           if [ -n "$PR_NUMBER" ]; then
             ARGS="$ARGS --github-comment --pr $PR_NUMBER"
+          fi
+        fi
+        # Diff-only mode: auto-detect PR base ref unless explicitly disabled
+        DIFF_ONLY="${{ inputs.diff-only }}"
+        if [ "$DIFF_ONLY" = "auto" ]; then
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if [ -n "$BASE_SHA" ]; then DIFF_ONLY="true"; else DIFF_ONLY="false"; fi
+        fi
+        if [ "$DIFF_ONLY" = "true" ]; then
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if [ -n "$BASE_SHA" ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            if git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+              ARGS="$ARGS --diff $BASE_SHA"
+            elif git fetch --depth=1 origin "$BASE_SHA" >/dev/null 2>&1 && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+              ARGS="$ARGS --diff $BASE_SHA"
+            else
+              echo "::warning::Could not resolve base commit $BASE_SHA. Running full scan."
+            fi
           fi
         fi
         if [ -n "${{ inputs.args }}" ]; then ARGS="$ARGS ${{ inputs.args }}"; fi
