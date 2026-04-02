@@ -94,9 +94,14 @@ runs:
         fi
         if [ "$DIFF_ONLY" = "true" ]; then
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          if [ -n "$BASE_SHA" ]; then
-            git fetch --depth=1 origin "$BASE_SHA" 2>/dev/null || true
-            ARGS="$ARGS --diff $BASE_SHA"
+          if [ -n "$BASE_SHA" ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            if git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+              ARGS="$ARGS --diff $BASE_SHA"
+            elif git fetch --depth=1 origin "$BASE_SHA" >/dev/null 2>&1 && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+              ARGS="$ARGS --diff $BASE_SHA"
+            else
+              echo "::warning::Could not resolve base commit $BASE_SHA. Running full scan."
+            fi
           fi
         fi
         if [ -n "${{ inputs.args }}" ]; then ARGS="$ARGS ${{ inputs.args }}"; fi
