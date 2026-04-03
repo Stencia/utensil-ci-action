@@ -150,6 +150,40 @@ runs:
           echo "finding-count=0" >> $GITHUB_OUTPUT
         fi
 
+    - name: Create check run for findings
+      shell: bash
+      if: always() && steps.parse.outputs.has-findings == 'true'
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        FINDING_COUNT="${{ steps.parse.outputs.finding-count }}"
+        REPORT="${{ steps.scan.outputs.report-path }}"
+
+        # Build summary from findings
+        SUMMARY="$FINDING_COUNT code pattern finding(s) detected."
+        if [ -f "$REPORT" ]; then
+          DETAILS=$(jq -r '
+            [.intelligence[]?
+              | select(.category == "securityRisk" and ((.key // "") | endswith("Summary") | not))
+              | .evidence[]?
+              | select(.type == "sourceFile")
+              | .filePath + (if .lineNumber then ":" + (.lineNumber | tostring) else "" end)
+            ] | join(", ")
+          ' "$REPORT" 2>/dev/null || echo "")
+          if [ -n "$DETAILS" ]; then
+            SUMMARY="$SUMMARY Files: $DETAILS"
+          fi
+        fi
+
+        gh api repos/${{ github.repository }}/check-runs \
+          -f name="Utensil Code Patterns" \
+          -f head_sha="${{ github.event.pull_request.head.sha || github.sha }}" \
+          -f status="completed" \
+          -f conclusion="neutral" \
+          -f "output[title]=$FINDING_COUNT code pattern finding(s)" \
+          -f "output[summary]=$SUMMARY" \
+          > /dev/null 2>&1 || echo "::warning::Could not create check run (needs checks: write permission)"
+
     - name: Upload results
       shell: bash
       if: inputs.upload == 'true' && steps.scan.outputs.report-path != ''
