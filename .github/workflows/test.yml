@@ -42,7 +42,6 @@ jobs:
         with:
           license-token: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
           fail-on: critical
-          github-comment: 'false'
 
       - name: Skip licensed test for forked pull requests
         if: ${{ env.CAN_RUN_LICENSED_TEST != 'true' }}

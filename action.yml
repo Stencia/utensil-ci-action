@@ -53,7 +53,10 @@ outputs:
     description: 'Total security finding count'
     value: ${{ steps.parse.outputs.finding-count }}
   has-findings:
-    description: 'True if actionable (non-false-positive) findings exist'
+    description: 'True if any code pattern findings were detected (including false positives)'
+    value: ${{ steps.parse.outputs.has-findings }}
+  has-actionable-findings:
+    description: 'True if actionable (real_risk or context_dependent) findings exist after AI evaluation'
     value: ${{ steps.report.outputs.has-actionable }}
 
 runs:
@@ -128,9 +131,15 @@ runs:
           FINDING_COUNT=$(jq '[.intelligence[]? | select(.category == "securityRisk" and (.key | endswith("Summary") | not))] | length' "$REPORT" 2>/dev/null || echo 0)
           echo "vuln-count=$VULN_COUNT" >> $GITHUB_OUTPUT
           echo "finding-count=$FINDING_COUNT" >> $GITHUB_OUTPUT
+          if [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
+            echo "has-findings=true" >> $GITHUB_OUTPUT
+          else
+            echo "has-findings=false" >> $GITHUB_OUTPUT
+          fi
         else
           echo "vuln-count=0" >> $GITHUB_OUTPUT
           echo "finding-count=0" >> $GITHUB_OUTPUT
+          echo "has-findings=false" >> $GITHUB_OUTPUT
         fi
 
     - name: Upload and evaluate
@@ -173,7 +182,7 @@ runs:
     - name: Report findings
       id: report
       shell: bash
-      if: always() && steps.scan.outputs.report-path != ''
+      if: always() && inputs.upload == 'true' && steps.upload.outputs.response-path != ''
       env:
         GH_TOKEN: ${{ inputs.github-token }}
       run: |
@@ -183,18 +192,13 @@ runs:
         REPO="${{ github.repository }}"
         COMMENT_MARKER="<!-- utensil-pr-comment -->"
 
-        # Parse AI evaluation results from ingest response
-        REAL_RISK=0
-        CONTEXT_DEP=0
-        FALSE_POS=0
-        ACTIONABLE_COUNT=0
+        echo "has-actionable=false" >> $GITHUB_OUTPUT
 
-        if [ -f "$RESPONSE" ]; then
-          REAL_RISK=$(jq -r '.ai.real_risk // 0' "$RESPONSE" 2>/dev/null || echo 0)
-          CONTEXT_DEP=$(jq -r '.ai.context_dependent // 0' "$RESPONSE" 2>/dev/null || echo 0)
-          FALSE_POS=$(jq -r '.ai.false_positive // 0' "$RESPONSE" 2>/dev/null || echo 0)
-          ACTIONABLE_COUNT=$((REAL_RISK + CONTEXT_DEP))
-        fi
+        # Parse AI evaluation results from ingest response
+        REAL_RISK=$(jq -r '.ai.real_risk // 0' "$RESPONSE" 2>/dev/null || echo 0)
+        CONTEXT_DEP=$(jq -r '.ai.context_dependent // 0' "$RESPONSE" 2>/dev/null || echo 0)
+        FALSE_POS=$(jq -r '.ai.false_positive // 0' "$RESPONSE" 2>/dev/null || echo 0)
+        ACTIONABLE_COUNT=$((REAL_RISK + CONTEXT_DEP))
 
         FINDING_COUNT="${{ steps.parse.outputs.finding-count }}"
         VULN_COUNT="${{ steps.parse.outputs.vuln-count }}"
@@ -213,14 +217,12 @@ runs:
           fi
           COMMENT+=$'\n'$'\n'
 
-          # Build findings table from ingest response
-          if [ -f "$RESPONSE" ]; then
-            COMMENT+="| Rule | File | Severity | AI |"$'\n'
-            COMMENT+="|------|------|----------|----|"$'\n'
-            while IFS=$'\t' read -r key filePath severity verdict; do
-              COMMENT+="| $key | $filePath | $severity | $verdict |"$'\n'
-            done < <(jq -r '.findings[]? | select(.aiVerdict != "false_positive") | [.key, (.filePath // ""), (.severity // ""), (if .aiVerdict == "real_risk" then "Risk" elif .aiVerdict == "context_dependent" then "Review" else "" end)] | @tsv' "$RESPONSE" 2>/dev/null)
-          fi
+          # Build findings table: only real_risk and context_dependent
+          COMMENT+="| Rule | File | Severity | AI |"$'\n'
+          COMMENT+="|------|------|----------|----|"$'\n'
+          while IFS=$'\t' read -r key filePath severity verdict; do
+            COMMENT+="| $key | $filePath | $severity | $verdict |"$'\n'
+          done < <(jq -r '.findings[]? | select(.aiVerdict == "real_risk" or .aiVerdict == "context_dependent") | [.key, (.filePath // ""), (.severity // ""), (if .aiVerdict == "real_risk" then "Risk" elif .aiVerdict == "context_dependent" then "Review" else "" end)] | @tsv' "$RESPONSE" 2>/dev/null)
         elif [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null && [ "$FALSE_POS" -gt 0 ] 2>/dev/null; then
           COMMENT+="No actionable findings. $FALSE_POS code pattern(s) detected and classified as false positive by AI."$'\n'$'\n'
         elif [ "$FINDING_COUNT" -eq 0 ] 2>/dev/null && [ "$VULN_COUNT" -eq 0 ] 2>/dev/null; then
@@ -233,7 +235,7 @@ runs:
 
         # Post or update PR comment
         if [ -n "$PR_NUMBER" ]; then
-          EXISTING_ID=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" \
+          EXISTING_ID=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" \
             --jq ".[] | select(.body | contains(\"$COMMENT_MARKER\")) | .id" 2>/dev/null | head -1)
 
           if [ -n "$EXISTING_ID" ]; then
