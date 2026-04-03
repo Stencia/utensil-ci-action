@@ -35,6 +35,10 @@ inputs:
     description: 'Ingest endpoint URL'
     required: false
     default: 'https://api.utensil.tools/api/ingest'
+  upload-fail-on-error:
+    description: 'Fail the action when dashboard upload returns a non-2xx response'
+    required: false
+    default: 'true'
   args:
     description: 'Additional CLI arguments (pass-through)'
     required: false
@@ -137,11 +141,13 @@ runs:
               else ([security_findings[] | select(dismissed_flag == true)] | length)
               end;
             def active_count:
-              if (run_summary.activeFindingCount? != null) then run_summary.activeFindingCount
-              elif (run_summary.findingCount? != null and run_summary.dismissedFindingCount? != null) then
-                (run_summary.findingCount - run_summary.dismissedFindingCount)
-              else (reported_count - dismissed_count)
-              end;
+              (
+                if (run_summary.activeFindingCount? != null) then run_summary.activeFindingCount
+                elif (run_summary.findingCount? != null and run_summary.dismissedFindingCount? != null) then
+                  (run_summary.findingCount - run_summary.dismissedFindingCount)
+                else (reported_count - dismissed_count)
+                end
+              ) | if . < 0 then 0 else . end;
             {
               reported: (reported_count // 0),
               active: (active_count // 0),
@@ -176,6 +182,19 @@ runs:
         if [ ! -f "$REPORT" ]; then exit 0; fi
         PAYLOAD="${{ runner.temp }}/utensil-upload.json"
         RESPONSE_PATH="${{ runner.temp }}/utensil-upload-response.txt"
+        FAIL_ON_ERROR="${{ inputs.upload-fail-on-error }}"
+        REDACTED_UPLOAD_URL="${{ inputs.upload-url }}"
+        REDACTED_UPLOAD_URL="${REDACTED_UPLOAD_URL%%\?*}"
+        REDACTED_UPLOAD_URL="${REDACTED_UPLOAD_URL%%\#*}"
+        if [[ "$REDACTED_UPLOAD_URL" == *"://"* ]]; then
+          URL_SCHEME="${REDACTED_UPLOAD_URL%%://*}"
+          URL_REST="${REDACTED_UPLOAD_URL#*://}"
+          URL_AUTHORITY="${URL_REST%%/*}"
+          URL_PATH="/${URL_REST#*/}"
+          if [ "$URL_REST" = "$URL_AUTHORITY" ]; then URL_PATH=""; fi
+          URL_AUTHORITY="${URL_AUTHORITY##*@}"
+          REDACTED_UPLOAD_URL="${URL_SCHEME}://${URL_AUTHORITY}${URL_PATH}"
+        fi
         jq --arg repo "${{ github.repository }}" \
            --arg ref "${{ github.ref }}" \
            --arg sha "${{ github.sha }}" \
@@ -213,11 +232,13 @@ runs:
              else ([security_findings[] | select(dismissed_flag == true)] | length)
              end;
            def active_count:
-             if (run_summary.activeFindingCount? != null) then run_summary.activeFindingCount
-             elif (run_summary.findingCount? != null and run_summary.dismissedFindingCount? != null) then
-               (run_summary.findingCount - run_summary.dismissedFindingCount)
-             else (reported_count - dismissed_count)
-             end;
+             (
+               if (run_summary.activeFindingCount? != null) then run_summary.activeFindingCount
+               elif (run_summary.findingCount? != null and run_summary.dismissedFindingCount? != null) then
+                 (run_summary.findingCount - run_summary.dismissedFindingCount)
+               else (reported_count - dismissed_count)
+               end
+             ) | if . < 0 then 0 else . end;
            {
              metadata: {
                repo: $repo,
@@ -249,9 +270,17 @@ runs:
         fi
 
         if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-          echo "::warning::Utensil dashboard upload skipped (${HTTP_CODE}) via ${{ inputs.upload-url }}"
-          if [ -s "$RESPONSE_PATH" ]; then
+          if [ "$FAIL_ON_ERROR" = "true" ]; then
+            echo "::error::Utensil dashboard upload failed (${HTTP_CODE}) via ${REDACTED_UPLOAD_URL}"
+          else
+            echo "::warning::Utensil dashboard upload skipped (${HTTP_CODE}) via ${REDACTED_UPLOAD_URL}"
+          fi
+          if [ "${RUNNER_DEBUG:-0}" = "1" ] && [ -s "$RESPONSE_PATH" ]; then
+            echo "::debug::Upload response body (first 500 bytes):"
             head -c 500 "$RESPONSE_PATH"
             echo
+          fi
+          if [ "$FAIL_ON_ERROR" = "true" ]; then
+            exit 1
           fi
         fi
