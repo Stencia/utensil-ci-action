@@ -159,30 +159,50 @@ runs:
         FINDING_COUNT="${{ steps.parse.outputs.finding-count }}"
         REPORT="${{ steps.scan.outputs.report-path }}"
 
-        # Build summary from findings
+        # Build summary from findings (deduplicated, truncated)
         SUMMARY="$FINDING_COUNT code pattern finding(s) detected."
         if [ -f "$REPORT" ]; then
-          DETAILS=$(jq -r '
+          MAX_FILES=10
+          DETAILS_JSON=$(jq -c '
             [.intelligence[]?
               | select(.category == "securityRisk" and ((.key // "") | endswith("Summary") | not))
               | .evidence[]?
               | select(.type == "sourceFile")
               | .filePath + (if .lineNumber then ":" + (.lineNumber | tostring) else "" end)
-            ] | join(", ")
-          ' "$REPORT" 2>/dev/null || echo "")
-          if [ -n "$DETAILS" ]; then
-            SUMMARY="$SUMMARY Files: $DETAILS"
+            ] | unique
+          ' "$REPORT" 2>/dev/null || echo "[]")
+          if [ -n "$DETAILS_JSON" ] && [ "$DETAILS_JSON" != "[]" ]; then
+            DETAIL_COUNT=$(jq 'length' <<< "$DETAILS_JSON")
+            DISPLAY=$(jq -r --argjson max "$MAX_FILES" '.[0:$max] | join(", ")' <<< "$DETAILS_JSON")
+            if [ "$DETAIL_COUNT" -gt "$MAX_FILES" ]; then
+              REMAINING=$((DETAIL_COUNT - MAX_FILES))
+              SUMMARY="$SUMMARY Files: $DISPLAY, and $REMAINING more."
+            else
+              SUMMARY="$SUMMARY Files: $DISPLAY"
+            fi
           fi
         fi
 
-        gh api repos/${{ github.repository }}/check-runs \
-          -f name="Utensil Code Patterns" \
-          -f head_sha="${{ github.event.pull_request.head.sha || github.sha }}" \
-          -f status="completed" \
-          -f conclusion="neutral" \
-          -f "output[title]=$FINDING_COUNT code pattern finding(s)" \
-          -f "output[summary]=$SUMMARY" \
-          > /dev/null 2>&1 || echo "::warning::Could not create check run (needs checks: write permission)"
+        if ! command -v gh >/dev/null 2>&1; then
+          echo "::warning::Could not create check run (gh CLI not installed)"
+        else
+          GH_ERR="${{ runner.temp }}/utensil-check-error.txt"
+          if ! gh api repos/${{ github.repository }}/check-runs \
+            -f name="Utensil Code Patterns" \
+            -f head_sha="${{ github.event.pull_request.head.sha || github.sha }}" \
+            -f status="completed" \
+            -f conclusion="neutral" \
+            -f "output[title]=$FINDING_COUNT code pattern finding(s)" \
+            -f "output[summary]=$SUMMARY" \
+            > /dev/null 2>"$GH_ERR"; then
+            if grep -q 'HTTP 403' "$GH_ERR" 2>/dev/null; then
+              echo "::warning::Could not create check run (missing checks: write permission)"
+            else
+              GH_MSG=$(head -c 300 "$GH_ERR" 2>/dev/null || true)
+              echo "::warning::Could not create check run: $GH_MSG"
+            fi
+          fi
+        fi
 
     - name: Upload results
       shell: bash
