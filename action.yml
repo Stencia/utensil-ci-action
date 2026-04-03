@@ -134,6 +134,9 @@ runs:
           FINDING_COUNT=$(jq '[.intelligence[]? | select(.category == "securityRisk" and (.key | endswith("Summary") | not))] | length' "$REPORT" 2>/dev/null || echo 0)
           echo "vuln-count=$VULN_COUNT" >> $GITHUB_OUTPUT
           echo "finding-count=$FINDING_COUNT" >> $GITHUB_OUTPUT
+          if [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
+            echo "::warning::Utensil found $FINDING_COUNT code pattern finding(s). Review the PR comment for details."
+          fi
         else
           echo "vuln-count=0" >> $GITHUB_OUTPUT
           echo "finding-count=0" >> $GITHUB_OUTPUT
