@@ -164,6 +164,9 @@ runs:
           echo "reported-finding-count=$REPORTED_FINDING_COUNT" >> $GITHUB_OUTPUT
           echo "active-finding-count=$ACTIVE_FINDING_COUNT" >> $GITHUB_OUTPUT
           echo "dismissed-finding-count=$DISMISSED_FINDING_COUNT" >> $GITHUB_OUTPUT
+          if [ "$ACTIVE_FINDING_COUNT" -gt 0 ] 2>/dev/null; then
+            echo "::warning::Utensil found $ACTIVE_FINDING_COUNT active code pattern finding(s). Review the PR comment for details."
+          fi
         else
           echo "vuln-count=0" >> $GITHUB_OUTPUT
           echo "finding-count=0" >> $GITHUB_OUTPUT
