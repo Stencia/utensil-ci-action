@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Unit tests for the parse-results logic extracted from action.yml.
-# Tests finding count, warning emission, and check run conditions.
+# Tests vulnerability and finding counts from the parsed report.
 #
 # Run: bash tests/test-parse-results.sh
 
