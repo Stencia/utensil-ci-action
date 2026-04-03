@@ -15,12 +15,8 @@ inputs:
   fail-on:
     description: 'Fail if findings at or above severity (critical/high/medium/low)'
     required: false
-  github-comment:
-    description: 'Post findings as PR comment'
-    required: false
-    default: 'true'
   github-token:
-    description: 'GitHub token for PR comments'
+    description: 'GitHub token for PR comments and check runs'
     required: false
     default: ${{ github.token }}
   full:
@@ -28,7 +24,7 @@ inputs:
     required: false
     default: 'false'
   upload:
-    description: 'Upload results to Utensil API for dashboard'
+    description: 'Upload results to Utensil API for dashboard and AI evaluation'
     required: false
     default: 'false'
   upload-url:
@@ -57,8 +53,11 @@ outputs:
     description: 'Total security finding count'
     value: ${{ steps.parse.outputs.finding-count }}
   has-findings:
-    description: 'True if code pattern findings were detected'
+    description: 'True if any code pattern findings were detected (including false positives)'
     value: ${{ steps.parse.outputs.has-findings }}
+  has-actionable-findings:
+    description: 'True if actionable (real_risk or context_dependent) findings exist after AI evaluation'
+    value: ${{ steps.report.outputs.has-actionable }}
 
 runs:
   using: 'composite'
@@ -83,12 +82,7 @@ runs:
         ARGS="--json"
         if [ "${{ inputs.full }}" = "true" ]; then ARGS="$ARGS --full"; fi
         if [ -n "${{ inputs.fail-on }}" ]; then ARGS="$ARGS --fail-on ${{ inputs.fail-on }}"; fi
-        if [ "${{ inputs.github-comment }}" = "true" ]; then
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          if [ -n "$PR_NUMBER" ]; then
-            ARGS="$ARGS --github-comment --pr $PR_NUMBER"
-          fi
-        fi
+        # PR comment is posted by the action after AI evaluation, not by the CLI
         # Diff-only mode: auto-detect PR base ref unless explicitly disabled
         DIFF_ONLY="${{ inputs.diff-only }}"
         if [ "$DIFF_ONLY" = "auto" ]; then
@@ -138,73 +132,18 @@ runs:
           echo "vuln-count=$VULN_COUNT" >> $GITHUB_OUTPUT
           echo "finding-count=$FINDING_COUNT" >> $GITHUB_OUTPUT
           if [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
-            if [ "${{ inputs.github-comment }}" = "true" ] && [ -n "${{ github.event.pull_request.number }}" ]; then
-              echo "::warning::Utensil found $FINDING_COUNT code pattern finding(s). Review the PR comment for details."
-            else
-              echo "::warning::Utensil found $FINDING_COUNT code pattern finding(s). Check the scan report artifact."
-            fi
             echo "has-findings=true" >> $GITHUB_OUTPUT
+          else
+            echo "has-findings=false" >> $GITHUB_OUTPUT
           fi
         else
           echo "vuln-count=0" >> $GITHUB_OUTPUT
           echo "finding-count=0" >> $GITHUB_OUTPUT
+          echo "has-findings=false" >> $GITHUB_OUTPUT
         fi
 
-    - name: Create check run for findings
-      shell: bash
-      if: always() && steps.parse.outputs.has-findings == 'true'
-      env:
-        GH_TOKEN: ${{ inputs.github-token }}
-      run: |
-        FINDING_COUNT="${{ steps.parse.outputs.finding-count }}"
-        REPORT="${{ steps.scan.outputs.report-path }}"
-
-        # Build summary from findings (deduplicated, truncated)
-        SUMMARY="$FINDING_COUNT code pattern finding(s) detected."
-        if [ -f "$REPORT" ]; then
-          MAX_FILES=10
-          DETAILS_JSON=$(jq -c '
-            [.intelligence[]?
-              | select(.category == "securityRisk" and ((.key // "") | endswith("Summary") | not))
-              | .evidence[]?
-              | select(.type == "sourceFile")
-              | .filePath + (if .lineNumber then ":" + (.lineNumber | tostring) else "" end)
-            ] | unique
-          ' "$REPORT" 2>/dev/null || echo "[]")
-          if [ -n "$DETAILS_JSON" ] && [ "$DETAILS_JSON" != "[]" ]; then
-            DETAIL_COUNT=$(jq 'length' <<< "$DETAILS_JSON")
-            DISPLAY=$(jq -r --argjson max "$MAX_FILES" '.[0:$max] | join(", ")' <<< "$DETAILS_JSON")
-            if [ "$DETAIL_COUNT" -gt "$MAX_FILES" ]; then
-              REMAINING=$((DETAIL_COUNT - MAX_FILES))
-              SUMMARY="$SUMMARY Files: $DISPLAY, and $REMAINING more."
-            else
-              SUMMARY="$SUMMARY Files: $DISPLAY"
-            fi
-          fi
-        fi
-
-        if ! command -v gh >/dev/null 2>&1; then
-          echo "::warning::Could not create check run (gh CLI not installed)"
-        else
-          GH_ERR="${{ runner.temp }}/utensil-check-error.txt"
-          if ! gh api repos/${{ github.repository }}/check-runs \
-            -f name="Utensil Code Patterns" \
-            -f head_sha="${{ github.event.pull_request.head.sha || github.sha }}" \
-            -f status="completed" \
-            -f conclusion="neutral" \
-            -f "output[title]=$FINDING_COUNT code pattern finding(s)" \
-            -f "output[summary]=$SUMMARY" \
-            > /dev/null 2>"$GH_ERR"; then
-            if grep -q 'HTTP 403' "$GH_ERR" 2>/dev/null; then
-              echo "::warning::Could not create check run (missing checks: write permission)"
-            else
-              GH_MSG=$(head -c 300 "$GH_ERR" 2>/dev/null || true)
-              echo "::warning::Could not create check run: $GH_MSG"
-            fi
-          fi
-        fi
-
-    - name: Upload results
+    - name: Upload and evaluate
+      id: upload
       shell: bash
       if: inputs.upload == 'true' && steps.scan.outputs.report-path != ''
       env:
@@ -213,7 +152,7 @@ runs:
         REPORT="${{ steps.scan.outputs.report-path }}"
         if [ ! -f "$REPORT" ]; then exit 0; fi
         PAYLOAD="${{ runner.temp }}/utensil-upload.json"
-        RESPONSE_PATH="${{ runner.temp }}/utensil-upload-response.txt"
+        RESPONSE_PATH="${{ runner.temp }}/utensil-ingest-response.json"
         jq --arg repo "${{ github.repository }}" \
            --arg ref "${{ github.ref }}" \
            --arg sha "${{ github.sha }}" \
@@ -234,9 +173,87 @@ runs:
         fi
 
         if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-          echo "::warning::Utensil dashboard upload skipped (${HTTP_CODE}) via ${{ inputs.upload-url }}"
-          if [ -s "$RESPONSE_PATH" ]; then
-            head -c 500 "$RESPONSE_PATH"
-            echo
+          echo "::warning::Utensil dashboard upload failed (${HTTP_CODE})"
+          exit 0
+        fi
+
+        echo "response-path=$RESPONSE_PATH" >> $GITHUB_OUTPUT
+
+    - name: Report findings
+      id: report
+      shell: bash
+      if: always() && inputs.upload == 'true' && steps.upload.outputs.response-path != ''
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        RESPONSE="${{ steps.upload.outputs.response-path }}"
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+        HEAD_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+        REPO="${{ github.repository }}"
+        COMMENT_MARKER="<!-- utensil-pr-comment -->"
+
+        echo "has-actionable=false" >> $GITHUB_OUTPUT
+
+        # Parse AI evaluation results from ingest response
+        REAL_RISK=$(jq -r '.ai.real_risk // 0' "$RESPONSE" 2>/dev/null || echo 0)
+        CONTEXT_DEP=$(jq -r '.ai.context_dependent // 0' "$RESPONSE" 2>/dev/null || echo 0)
+        FALSE_POS=$(jq -r '.ai.false_positive // 0' "$RESPONSE" 2>/dev/null || echo 0)
+        ACTIONABLE_COUNT=$((REAL_RISK + CONTEXT_DEP))
+
+        FINDING_COUNT="${{ steps.parse.outputs.finding-count }}"
+        VULN_COUNT="${{ steps.parse.outputs.vuln-count }}"
+
+        # Build PR comment
+        COMMENT="## Utensil Security Report"$'\n'$'\n'
+
+        if [ "$VULN_COUNT" -gt 0 ] 2>/dev/null; then
+          COMMENT+="**$VULN_COUNT vulnerabilities**"$'\n'$'\n'
+        fi
+
+        if [ "$ACTIONABLE_COUNT" -gt 0 ] 2>/dev/null; then
+          COMMENT+="**$ACTIONABLE_COUNT actionable code pattern finding(s)**"
+          if [ "$FALSE_POS" -gt 0 ] 2>/dev/null; then
+            COMMENT+=" ($FALSE_POS dismissed as false positive by AI)"
           fi
+          COMMENT+=$'\n'$'\n'
+
+          # Build findings table: only real_risk and context_dependent
+          COMMENT+="| Rule | File | Severity | AI |"$'\n'
+          COMMENT+="|------|------|----------|----|"$'\n'
+          while IFS=$'\t' read -r key filePath severity verdict; do
+            COMMENT+="| $key | $filePath | $severity | $verdict |"$'\n'
+          done < <(jq -r '.findings[]? | select(.aiVerdict == "real_risk" or .aiVerdict == "context_dependent") | [.key, (.filePath // ""), (.severity // ""), (if .aiVerdict == "real_risk" then "Risk" elif .aiVerdict == "context_dependent" then "Review" else "" end)] | @tsv' "$RESPONSE" 2>/dev/null)
+        elif [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null && [ "$FALSE_POS" -gt 0 ] 2>/dev/null; then
+          COMMENT+="No actionable findings. $FALSE_POS code pattern(s) detected and classified as false positive by AI."$'\n'$'\n'
+        elif [ "$FINDING_COUNT" -eq 0 ] 2>/dev/null && [ "$VULN_COUNT" -eq 0 ] 2>/dev/null; then
+          COMMENT+="No security findings."$'\n'$'\n'
+        fi
+
+        COMMENT+="---"$'\n'
+        COMMENT+="*Scanned by [Utensil](https://utensil.tools)*"$'\n'
+        COMMENT+="$COMMENT_MARKER"
+
+        # Post or update PR comment
+        if [ -n "$PR_NUMBER" ]; then
+          EXISTING_ID=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" \
+            --jq ".[] | select(.body | contains(\"$COMMENT_MARKER\")) | .id" 2>/dev/null | head -1)
+
+          if [ -n "$EXISTING_ID" ]; then
+            gh api "repos/$REPO/issues/comments/$EXISTING_ID" -X PATCH -f body="$COMMENT" > /dev/null 2>&1 || true
+          else
+            gh api "repos/$REPO/issues/$PR_NUMBER/comments" -f body="$COMMENT" > /dev/null 2>&1 || true
+          fi
+        fi
+
+        # Create check run based on AI verdicts
+        if [ "$ACTIONABLE_COUNT" -gt 0 ] 2>/dev/null; then
+          echo "has-actionable=true" >> $GITHUB_OUTPUT
+          gh api "repos/$REPO/check-runs" \
+            -f name="Utensil Code Patterns" \
+            -f head_sha="$HEAD_SHA" \
+            -f status="completed" \
+            -f conclusion="neutral" \
+            -f "output[title]=$ACTIONABLE_COUNT actionable finding(s)" \
+            -f "output[summary]=$ACTIONABLE_COUNT real risk or context-dependent finding(s). $FALSE_POS false positive(s) dismissed." \
+            > /dev/null 2>&1 || true
         fi
