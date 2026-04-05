@@ -91,19 +91,30 @@ runs:
         fi
         if [ "$DIFF_ONLY" = "true" ] && [ -n "$PR_NUMBER" ]; then
           DIFF_FILE="${{ runner.temp }}/changed-files.txt"
+          : > "$DIFF_FILE"
           PAGE=1
+          FETCH_OK=true
           while true; do
-            BATCH=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER}/files?per_page=100&page=${PAGE}" \
-              | jq -r '.[].filename // empty')
+            RESP_FILE="${{ runner.temp }}/pr-files-page-${PAGE}.json"
+            HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w "%{http_code}" \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER}/files?per_page=100&page=${PAGE}")
+            if [ $? -ne 0 ] || [ "$HTTP_CODE" -ne 200 ]; then
+              echo "::warning::GitHub API returned HTTP $HTTP_CODE fetching changed files. Running full scan."
+              rm -f "$RESP_FILE" "$DIFF_FILE"
+              FETCH_OK=false
+              break
+            fi
+            BATCH=$(jq -r '.[].filename // empty' "$RESP_FILE")
+            rm -f "$RESP_FILE"
             [ -z "$BATCH" ] && break
             echo "$BATCH" >> "$DIFF_FILE"
             PAGE=$((PAGE + 1))
           done
-          if [ -s "$DIFF_FILE" ]; then
+          if [ "$FETCH_OK" = "true" ] && [ -s "$DIFF_FILE" ]; then
             ARGS="$ARGS --diff-files $DIFF_FILE"
-          else
-            echo "::warning::Could not fetch changed files from GitHub API. Running full scan."
+          elif [ "$FETCH_OK" = "true" ]; then
+            ARGS="$ARGS --diff-files $DIFF_FILE"
           fi
         fi
         if [ -n "${{ inputs.args }}" ]; then ARGS="$ARGS ${{ inputs.args }}"; fi
