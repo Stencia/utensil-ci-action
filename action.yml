@@ -219,38 +219,40 @@ runs:
         FINDING_COUNT="${{ steps.parse.outputs.finding-count }}"
         VULN_COUNT="${{ steps.parse.outputs.vuln-count }}"
 
-        # Build PR comment
-        COMMENT="## Utensil Security Report"$'\n'$'\n'
-
-        if [ "$VULN_COUNT" -gt 0 ] 2>/dev/null; then
-          COMMENT+="**$VULN_COUNT vulnerabilities**"$'\n'$'\n'
+        # Skip PR comment when there is nothing to report
+        SHOULD_COMMENT=false
+        if [ "$VULN_COUNT" -gt 0 ] 2>/dev/null || [ "$ACTIONABLE_COUNT" -gt 0 ] 2>/dev/null; then
+          SHOULD_COMMENT=true
         fi
 
-        if [ "$ACTIONABLE_COUNT" -gt 0 ] 2>/dev/null; then
-          COMMENT+="**$ACTIONABLE_COUNT actionable code pattern finding(s)**"
-          if [ "$FALSE_POS" -gt 0 ] 2>/dev/null; then
-            COMMENT+=" ($FALSE_POS dismissed as false positive by AI)"
+        if [ "$SHOULD_COMMENT" = true ] && [ -n "$PR_NUMBER" ]; then
+          # Build PR comment
+          COMMENT="## Utensil Security Report"$'\n'$'\n'
+
+          if [ "$VULN_COUNT" -gt 0 ] 2>/dev/null; then
+            COMMENT+="**$VULN_COUNT vulnerabilities**"$'\n'$'\n'
           fi
-          COMMENT+=$'\n'$'\n'
 
-          # Build findings table: only real_risk and context_dependent
-          COMMENT+="| Rule | File | Severity | AI |"$'\n'
-          COMMENT+="|------|------|----------|----|"$'\n'
-          while IFS=$'\t' read -r key filePath severity verdict; do
-            COMMENT+="| $key | $filePath | $severity | $verdict |"$'\n'
-          done < <(jq -r '.findings[]? | select(.aiVerdict == "real_risk" or .aiVerdict == "context_dependent") | [.key, (.filePath // ""), (.severity // ""), (if .aiVerdict == "real_risk" then "Risk" elif .aiVerdict == "context_dependent" then "Review" else "" end)] | @tsv' "$RESPONSE" 2>/dev/null)
-        elif [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null && [ "$FALSE_POS" -gt 0 ] 2>/dev/null; then
-          COMMENT+="No actionable findings. $FALSE_POS code pattern(s) detected and classified as false positive by AI."$'\n'$'\n'
-        elif [ "$FINDING_COUNT" -eq 0 ] 2>/dev/null && [ "$VULN_COUNT" -eq 0 ] 2>/dev/null; then
-          COMMENT+="No security findings."$'\n'$'\n'
-        fi
+          if [ "$ACTIONABLE_COUNT" -gt 0 ] 2>/dev/null; then
+            COMMENT+="**$ACTIONABLE_COUNT actionable code pattern finding(s)**"
+            if [ "$FALSE_POS" -gt 0 ] 2>/dev/null; then
+              COMMENT+=" ($FALSE_POS dismissed as false positive by AI)"
+            fi
+            COMMENT+=$'\n'$'\n'
 
-        COMMENT+="---"$'\n'
-        COMMENT+="*Scanned by [Utensil](https://utensil.tools)*"$'\n'
-        COMMENT+="$COMMENT_MARKER"
+            # Build findings table: only real_risk and context_dependent
+            COMMENT+="| Rule | File | Severity | AI |"$'\n'
+            COMMENT+="|------|------|----------|----|"$'\n'
+            while IFS=$'\t' read -r key filePath severity verdict; do
+              COMMENT+="| $key | $filePath | $severity | $verdict |"$'\n'
+            done < <(jq -r '.findings[]? | select(.aiVerdict == "real_risk" or .aiVerdict == "context_dependent") | [.key, (.filePath // ""), (.severity // ""), (if .aiVerdict == "real_risk" then "Risk" elif .aiVerdict == "context_dependent" then "Review" else "" end)] | @tsv' "$RESPONSE" 2>/dev/null)
+          fi
 
-        # Post or update PR comment
-        if [ -n "$PR_NUMBER" ]; then
+          COMMENT+="---"$'\n'
+          COMMENT+="*Scanned by [Utensil](https://utensil.tools)*"$'\n'
+          COMMENT+="$COMMENT_MARKER"
+
+          # Post or update PR comment
           EXISTING_ID=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" \
             --jq ".[] | select(.body | contains(\"$COMMENT_MARKER\")) | .id" 2>/dev/null | head -1)
 
@@ -258,6 +260,13 @@ runs:
             gh api "repos/$REPO/issues/comments/$EXISTING_ID" -X PATCH -f body="$COMMENT" > /dev/null 2>&1 || true
           else
             gh api "repos/$REPO/issues/$PR_NUMBER/comments" -f body="$COMMENT" > /dev/null 2>&1 || true
+          fi
+        elif [ -n "$PR_NUMBER" ]; then
+          # Clean scan: delete any stale comment from a previous run
+          EXISTING_ID=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" \
+            --jq ".[] | select(.body | contains(\"$COMMENT_MARKER\")) | .id" 2>/dev/null | head -1)
+          if [ -n "$EXISTING_ID" ]; then
+            gh api "repos/$REPO/issues/comments/$EXISTING_ID" -X DELETE > /dev/null 2>&1 || true
           fi
         fi
 
