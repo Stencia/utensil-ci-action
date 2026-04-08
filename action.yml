@@ -261,6 +261,13 @@ runs:
           else
             gh api "repos/$REPO/issues/$PR_NUMBER/comments" -f body="$COMMENT" > /dev/null 2>&1 || true
           fi
+        elif [ -n "$PR_NUMBER" ]; then
+          # Clean scan: delete any stale comment from a previous run
+          EXISTING_ID=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" \
+            --jq ".[] | select(.body | contains(\"$COMMENT_MARKER\")) | .id" 2>/dev/null | head -1)
+          if [ -n "$EXISTING_ID" ]; then
+            gh api "repos/$REPO/issues/comments/$EXISTING_ID" -X DELETE > /dev/null 2>&1 || true
+          fi
         fi
 
         # Create check run based on AI verdicts
