@@ -174,7 +174,8 @@ runs:
            --arg sha "${{ github.sha }}" \
            --arg run_id "${{ github.run_id }}" \
            --arg trigger "${{ github.event_name }}" \
-           '{metadata: {repo: $repo, ref: $ref, sha: $sha, run_id: $run_id, trigger: $trigger, uploaded_at: (now | todate)}, report: .}' \
+           --arg source "ci" \
+           '{metadata: {repo: $repo, ref: $ref, sha: $sha, run_id: $run_id, trigger: $trigger, source: $source, uploaded_at: (now | todate)}, report: .}' \
            "$REPORT" > "$PAYLOAD"
 
         HTTP_CODE=$(curl -sS -o "$RESPONSE_PATH" -w "%{http_code}" \
