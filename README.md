@@ -22,7 +22,25 @@ jobs:
 
 ## Workflow authorship provenance
 
-`authorship-provenance-json` lets a caller attach workflow or platform attribution metadata to the CLI report. Pass either a JSON array of entries or a wrapped object with an `entries` array. `provider`, `tool`, and `model` should describe whatever produced the code being scanned.
+Tell Utensil what produced the code being scanned. The most common case is an AI-assisted PR: set the `ai-*` typed inputs and the action assembles the right payload.
+
+```yaml
+      - uses: Stencia/utensil-ci-action@main
+        with:
+          license-token: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
+          ai-provider: Anthropic
+          ai-tool: Claude Code
+          ai-model: claude-sonnet-4-5
+          ai-used-agent: 'true'
+```
+
+Optional inputs: `ai-feature`, `ai-mode`, `ai-agent-session-id`. `ai-used-agent` defaults to `false`. When any `ai-*` input is set, the action emits a single workflow-instrumentation entry with `authorship: aiAssisted`, hardcoded structural fields, and the typed metadata you provided.
+
+When the CLI runs inside a GitHub Actions runner, it auto-populates `repo`, `ref`, `sha`, `runId`, `trigger`, and `pullRequestNumber` from the standard `GITHUB_*` environment variables. On `pull_request` events, `ref` and `sha` come from `pull_request.head` rather than the synthetic merge ref. Autofill requires a Utensil CLI build that includes [wbraynen/Utensil#93](https://github.com/wbraynen/Utensil/pull/93) (merged 2026-04-13, lands in the first release after `v0.25.0-alpha`). Older CLIs leave the runner-context fields unset; the report stays valid either way.
+
+### Escape hatch: raw JSON
+
+For multiple entries per scan, custom structural fields, or a non-AI producer, pass `authorship-provenance-json` directly. When set, this takes precedence over the `ai-*` inputs.
 
 ```yaml
       - uses: Stencia/utensil-ci-action@main
@@ -32,8 +50,4 @@ jobs:
             [{"authorship":"human","sourceType":"workflowInstrumentation","evidenceType":"workflowAttributionSignal","attributionScope":"platform","evidenceStrength":"weak","provider":"Anthropic","tool":"Claude Code","model":"claude-sonnet-4-5","usedAgent":true}]
 ```
 
-The action forwards this input to the CLI via `UTENSIL_EXTERNAL_AUTHORSHIP_PROVENANCE_JSON`.
-
-When the CLI runs inside a GitHub Actions runner, it auto-populates `repo`, `ref`, `sha`, `runId`, `trigger`, and `pullRequestNumber` from the standard `GITHUB_*` environment variables, so they can be omitted from the payload. On `pull_request` events, `ref` and `sha` come from `pull_request.head` rather than the synthetic merge ref. Explicit payload fields always win over autofill, so callers that need a specific value can still set it.
-
-Autofill requires a Utensil CLI build that includes [wbraynen/Utensil#93](https://github.com/wbraynen/Utensil/pull/93) (merged 2026-04-13, lands in the first release after `v0.25.0-alpha`). Older CLIs accept the same minimal payload but will leave the runner-context fields unset; the report stays valid either way.
+In either form the action forwards the resolved payload to the CLI via `UTENSIL_EXTERNAL_AUTHORSHIP_PROVENANCE_JSON`.

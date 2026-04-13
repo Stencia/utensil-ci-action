@@ -39,7 +39,29 @@ inputs:
     description: 'Additional CLI arguments (pass-through)'
     required: false
   authorship-provenance-json:
-    description: 'Optional JSON object or array describing workflow/platform authorship provenance to embed in the CLI report'
+    description: 'Optional raw JSON object or array describing workflow/platform authorship provenance. Escape hatch for advanced cases (multiple entries, custom structural fields). When set, takes precedence over the ai-* typed inputs below.'
+    required: false
+  ai-provider:
+    description: 'AI provider attributing this scan, e.g. "Anthropic", "OpenAI". Setting any ai-* input enables typed-input provenance.'
+    required: false
+  ai-tool:
+    description: 'AI tool name, e.g. "Claude Code", "GitHub Copilot"'
+    required: false
+  ai-model:
+    description: 'AI model identifier, e.g. "claude-sonnet-4-5"'
+    required: false
+  ai-used-agent:
+    description: 'Set to "true" if the AI ran in autonomous/agentic mode'
+    required: false
+    default: 'false'
+  ai-feature:
+    description: 'Optional free-form feature label (e.g. "pr-review")'
+    required: false
+  ai-mode:
+    description: 'Optional free-form mode label (e.g. "agentic")'
+    required: false
+  ai-agent-session-id:
+    description: 'Optional AI agent session identifier'
     required: false
 
 outputs:
@@ -75,13 +97,76 @@ runs:
         chmod +x /tmp/utensil
         echo "/tmp" >> $GITHUB_PATH
 
+    - name: Resolve authorship provenance
+      id: provenance
+      shell: bash
+      env:
+        AUTHORSHIP_PROVENANCE_JSON: ${{ inputs.authorship-provenance-json }}
+        AI_PROVIDER: ${{ inputs.ai-provider }}
+        AI_TOOL: ${{ inputs.ai-tool }}
+        AI_MODEL: ${{ inputs.ai-model }}
+        AI_USED_AGENT: ${{ inputs.ai-used-agent }}
+        AI_FEATURE: ${{ inputs.ai-feature }}
+        AI_MODE: ${{ inputs.ai-mode }}
+        AI_AGENT_SESSION_ID: ${{ inputs.ai-agent-session-id }}
+      run: |
+        # Escape hatch: raw JSON wins over typed inputs.
+        if [ -n "$AUTHORSHIP_PROVENANCE_JSON" ]; then
+          {
+            echo "RESOLVED_PROVENANCE_JSON<<EOF_PROVENANCE"
+            echo "$AUTHORSHIP_PROVENANCE_JSON"
+            echo "EOF_PROVENANCE"
+          } >> "$GITHUB_ENV"
+          exit 0
+        fi
+        # No typed inputs supplied: omit the env var entirely.
+        if [ -z "$AI_PROVIDER$AI_TOOL$AI_MODEL$AI_FEATURE$AI_MODE$AI_AGENT_SESSION_ID" ] \
+           && [ "$AI_USED_AGENT" != "true" ]; then
+          exit 0
+        fi
+        # Build a single entry from typed inputs. Structural fields are stable
+        # for the GitHub Actions producer path; see Stencia/utensil-ci-action#15
+        # for the schema rationale.
+        USED_AGENT=false
+        if [ "$AI_USED_AGENT" = "true" ]; then USED_AGENT=true; fi
+        # If any AI metadata is present, mark authorship as aiAssisted.
+        AUTHORSHIP=human
+        if [ -n "$AI_PROVIDER$AI_TOOL$AI_MODEL" ] || [ "$USED_AGENT" = "true" ]; then
+          AUTHORSHIP=aiAssisted
+        fi
+        ENTRY=$(jq -nc \
+          --arg authorship "$AUTHORSHIP" \
+          --arg provider "$AI_PROVIDER" \
+          --arg tool "$AI_TOOL" \
+          --arg model "$AI_MODEL" \
+          --arg feature "$AI_FEATURE" \
+          --arg mode "$AI_MODE" \
+          --arg sessionId "$AI_AGENT_SESSION_ID" \
+          --argjson usedAgent "$USED_AGENT" \
+          '{
+             authorship: $authorship,
+             sourceType: "workflowInstrumentation",
+             evidenceType: "workflowAttributionSignal",
+             attributionScope: "platform",
+             evidenceStrength: "weak",
+             usedAgent: $usedAgent
+           }
+           + (if $provider != "" then {provider: $provider} else {} end)
+           + (if $tool != "" then {tool: $tool} else {} end)
+           + (if $model != "" then {model: $model} else {} end)
+           + (if $feature != "" then {feature: $feature} else {} end)
+           + (if $mode != "" then {mode: $mode} else {} end)
+           + (if $sessionId != "" then {agentSessionId: $sessionId} else {} end)')
+        PAYLOAD=$(jq -nc --argjson entry "$ENTRY" '[$entry]')
+        echo "RESOLVED_PROVENANCE_JSON=$PAYLOAD" >> "$GITHUB_ENV"
+
     - name: Run scan
       id: scan
       shell: bash
       env:
         UTENSIL_LICENSE_TOKEN: ${{ inputs.license-token }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
-        UTENSIL_EXTERNAL_AUTHORSHIP_PROVENANCE_JSON: ${{ inputs.authorship-provenance-json }}
+        UTENSIL_EXTERNAL_AUTHORSHIP_PROVENANCE_JSON: ${{ env.RESOLVED_PROVENANCE_JSON }}
       run: |
         ARGS="--json"
         if [ "${{ inputs.full }}" = "true" ]; then ARGS="$ARGS --full"; fi
