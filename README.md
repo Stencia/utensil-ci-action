@@ -29,7 +29,9 @@ jobs:
         with:
           license-token: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
           authorship-provenance-json: >-
-            [{"authorship":"human","sourceType":"workflowInstrumentation","evidenceType":"workflowAttributionSignal","attributionScope":"platform","evidenceStrength":"weak","provider":"GitHub","tool":"Utensil Scan Service","trigger":"pull_request","runId":"${{ github.run_id }}"}]
+            [{"authorship":"human","sourceType":"workflowInstrumentation","evidenceType":"workflowAttributionSignal","attributionScope":"platform","evidenceStrength":"weak","provider":"GitHub","tool":"Utensil Scan Service"}]
 ```
 
 The action forwards this input to the CLI via `UTENSIL_EXTERNAL_AUTHORSHIP_PROVENANCE_JSON`.
+
+When the CLI runs inside a GitHub Actions runner, it auto-populates `repo`, `ref`, `sha`, `runId`, `trigger`, and `pullRequestNumber` from the standard `GITHUB_*` environment variables, so they can be omitted from the payload. On `pull_request` events, `ref` and `sha` come from `pull_request.head` rather than the synthetic merge ref. Explicit payload fields always win over autofill, so callers that need a specific value can still set it.
