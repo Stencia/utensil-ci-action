@@ -38,6 +38,9 @@ inputs:
   args:
     description: 'Additional CLI arguments (pass-through)'
     required: false
+  authorship-provenance-json:
+    description: 'Optional JSON object or array describing workflow/platform authorship provenance to embed in the CLI report'
+    required: false
 
 outputs:
   exit-code:
@@ -78,6 +81,7 @@ runs:
       env:
         UTENSIL_LICENSE_TOKEN: ${{ inputs.license-token }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        UTENSIL_EXTERNAL_AUTHORSHIP_PROVENANCE_JSON: ${{ inputs.authorship-provenance-json }}
       run: |
         ARGS="--json"
         if [ "${{ inputs.full }}" = "true" ]; then ARGS="$ARGS --full"; fi
