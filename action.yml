@@ -129,10 +129,13 @@ runs:
         # for the schema rationale.
         USED_AGENT=false
         if [ "$AI_USED_AGENT" = "true" ]; then USED_AGENT=true; fi
-        # If any AI metadata is present, mark authorship as aiAssisted.
+        # CommitAuthorship is human / vibeCoded / bot (no aiAssisted). An
+        # agent-mode AI session is vibeCoded. AI-assisted autocomplete where the
+        # user wrote the commits stays human; the tool/provider/model fields
+        # still record that AI was involved.
         AUTHORSHIP=human
-        if [ -n "$AI_PROVIDER$AI_TOOL$AI_MODEL" ] || [ "$USED_AGENT" = "true" ]; then
-          AUTHORSHIP=aiAssisted
+        if [ "$USED_AGENT" = "true" ]; then
+          AUTHORSHIP=vibeCoded
         fi
         ENTRY=$(jq -nc \
           --arg authorship "$AUTHORSHIP" \

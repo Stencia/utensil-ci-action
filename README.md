@@ -34,7 +34,7 @@ Tell Utensil what produced the code being scanned. The most common case is an AI
           ai-used-agent: 'true'
 ```
 
-Optional inputs: `ai-feature`, `ai-mode`, `ai-agent-session-id`. `ai-used-agent` defaults to `false`. When any `ai-*` input is set, the action emits a single workflow-instrumentation entry with `authorship: aiAssisted`, hardcoded structural fields, and the typed metadata you provided.
+Optional inputs: `ai-feature`, `ai-mode`, `ai-agent-session-id`. `ai-used-agent` defaults to `false`. When any `ai-*` input is set, the action emits a single workflow-instrumentation entry with hardcoded structural fields and the typed metadata you provided. `authorship` is set to `vibeCoded` when `ai-used-agent` is `true` (agent-mode AI work) and to `human` otherwise (AI-assisted, but the commits remain human-authored; the `tool` / `provider` / `model` fields still record the assistance).
 
 When the CLI runs inside a GitHub Actions runner, it auto-populates `repo`, `ref`, `sha`, `runId`, `trigger`, and `pullRequestNumber` from the standard `GITHUB_*` environment variables. On `pull_request` events, `ref` and `sha` come from `pull_request.head` rather than the synthetic merge ref. Autofill requires a Utensil CLI build that includes [wbraynen/Utensil#93](https://github.com/wbraynen/Utensil/pull/93) (merged 2026-04-13, lands in the first release after `v0.25.0-alpha`). Older CLIs leave the runner-context fields unset; the report stays valid either way.
 
