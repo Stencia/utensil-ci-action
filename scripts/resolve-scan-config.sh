@@ -48,7 +48,7 @@ SCAN_TARGET_SOURCE=""
 CONFIG_FETCH_STATUS="skipped"
 
 FETCH_SCAN_CONFIG="$(lower "${INPUT_FETCH_SCAN_CONFIG:-true}")"
-SCAN_CONFIG_URL="${INPUT_SCAN_CONFIG_URL:-https://api.utensil.tools/api/scan-config}"
+SCAN_CONFIG_URL="${UTENSIL_SCAN_CONFIG_URL:-https://api.utensil.tools/api/scan-config}"
 REPO_OWNER="${REPO_OWNER:-}"
 REPO_NAME="${REPO_NAME:-}"
 

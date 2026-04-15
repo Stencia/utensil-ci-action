@@ -30,16 +30,12 @@ inputs:
     description: 'Optional Debian architecture override (for example: amd64)'
     required: false
   native-resolvers:
-    description: 'Enable opt-in native dependency resolution when lockfiles are missing'
+    description: 'Enable native dependency resolution when lockfiles are missing; may execute code from the target repo'
     required: false
   fetch-scan-config:
     description: 'Best-effort fetch of tenant-owned repo scan settings from Utensil before scanning'
     required: false
     default: 'true'
-  scan-config-url:
-    description: 'Base URL for hosted repo scan-config lookups. Bearer-token fetches are restricted to the official Utensil API host.'
-    required: false
-    default: 'https://api.utensil.tools/api/scan-config'
   upload:
     description: 'Upload results to Utensil API for dashboard and AI evaluation'
     required: false
@@ -53,7 +49,7 @@ inputs:
     required: false
     default: 'auto'
   args:
-    description: 'Additional CLI arguments (pass-through)'
+    description: 'Additional CLI arguments split on shell whitespace; quoted values containing spaces are not preserved'
     required: false
   authorship-provenance-json:
     description: 'Optional raw JSON object or array describing workflow/platform authorship provenance. Escape hatch for advanced cases (multiple entries, custom structural fields). When set, takes precedence over the ai-* typed inputs below.'
@@ -196,7 +192,6 @@ runs:
         INPUT_DEBIAN_ARCH: ${{ inputs.debian-arch }}
         INPUT_NATIVE_RESOLVERS: ${{ inputs.native-resolvers }}
         INPUT_FETCH_SCAN_CONFIG: ${{ inputs.fetch-scan-config }}
-        INPUT_SCAN_CONFIG_URL: ${{ inputs.scan-config-url }}
         INPUT_FAIL_ON: ${{ inputs.fail-on }}
         INPUT_ARGS: ${{ inputs.args }}
         INPUT_DIFF_ONLY: ${{ inputs.diff-only }}
