@@ -32,7 +32,6 @@ inputs:
   native-resolvers:
     description: 'Enable opt-in native dependency resolution when lockfiles are missing'
     required: false
-    default: 'false'
   fetch-scan-config:
     description: 'Best-effort fetch of tenant-owned repo scan settings from Utensil before scanning'
     required: false
@@ -195,7 +194,8 @@ runs:
         ARGS="--json"
         EFFECTIVE_DEBIAN_SUITE="${{ inputs.debian-suite }}"
         EFFECTIVE_DEBIAN_ARCH="${{ inputs.debian-arch }}"
-        EFFECTIVE_NATIVE_RESOLVERS="${{ inputs.native-resolvers }}"
+        NATIVE_RESOLVERS_INPUT="${{ inputs.native-resolvers }}"
+        EFFECTIVE_NATIVE_RESOLVERS="$NATIVE_RESOLVERS_INPUT"
         SCAN_TARGET_SOURCE=""
         CONFIG_FETCH_STATUS="skipped"
 
@@ -220,7 +220,7 @@ runs:
               if [ -z "$EFFECTIVE_DEBIAN_ARCH" ]; then
                 EFFECTIVE_DEBIAN_ARCH=$(jq -r '.debianArch // empty' "$CONFIG_RESPONSE" 2>/dev/null || true)
               fi
-              if [ "$EFFECTIVE_NATIVE_RESOLVERS" != "true" ]; then
+              if [ -z "$NATIVE_RESOLVERS_INPUT" ]; then
                 EFFECTIVE_NATIVE_RESOLVERS=$(jq -r 'if .nativeResolversEnabled == true then "true" else "false" end' "$CONFIG_RESPONSE" 2>/dev/null || echo "false")
               fi
               CONFIG_FETCH_STATUS="fetched"
