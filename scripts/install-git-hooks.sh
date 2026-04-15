@@ -2,7 +2,7 @@
 
 set -eu
 
-ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+ROOT="$(CDPATH= cd -P -- "$(dirname "$0")/.." && pwd -P)"
 HOOKS_DIR="$ROOT/.githooks"
 PRIMARY_CHECKOUT="${UTENSIL_PRIMARY_CHECKOUT:-}"
 
@@ -19,6 +19,7 @@ if [ "$PRIMARY_CHECKOUT" = "current" ] || [ "$PRIMARY_CHECKOUT" = "1" ] || [ "$P
 fi
 
 if [ -n "$PRIMARY_CHECKOUT" ]; then
+  PRIMARY_CHECKOUT="$(CDPATH= cd -P -- "$PRIMARY_CHECKOUT" && pwd -P)"
   git -C "$ROOT" config utensil.primaryCheckout "$PRIMARY_CHECKOUT"
 fi
 

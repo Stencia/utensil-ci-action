@@ -8,7 +8,7 @@
 
 ## Sibling Repo Discovery
 
-- When a task refers to "all Utensil repos", use `/Users/will/code/utensil-all` as the source of truth.
+- When a task refers to "all Utensil repos", use the directory named by `UTENSIL_ALL_REPOS` as the source of truth. If unset, use a local symlink inventory such as `~/code/utensil-all`.
 - That directory is a local symlink inventory for the active Utensil repos. Enumerate it first instead of inferring repo scope from the current checkout.
 - Current entries include:
   - `Utensil`
@@ -18,4 +18,4 @@
   - `utensil-scan-service`
   - `utensil-vscode`
   - `utensil-web`
-- After resolving the local repo paths from `/Users/will/code/utensil-all`, read each repo's `origin` remote to map it to the corresponding GitHub repository before querying PRs or review feedback.
+- After resolving the local repo paths from the symlink inventory, read each repo's `origin` remote to map it to the corresponding GitHub repository before querying PRs or review feedback.

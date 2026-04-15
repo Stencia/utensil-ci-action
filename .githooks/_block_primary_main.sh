@@ -5,6 +5,13 @@ set -eu
 TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null || printf '')"
 PRIMARY_CHECKOUT="$(git config --path --get utensil.primaryCheckout 2>/dev/null || printf '')"
 
+if [ -n "$TOPLEVEL" ]; then
+  TOPLEVEL="$(CDPATH= cd -P -- "$TOPLEVEL" && pwd -P)"
+fi
+if [ -n "$PRIMARY_CHECKOUT" ]; then
+  PRIMARY_CHECKOUT="$(CDPATH= cd -P -- "$PRIMARY_CHECKOUT" && pwd -P)"
+fi
+
 if [ -z "$PRIMARY_CHECKOUT" ] || [ "$TOPLEVEL" != "$PRIMARY_CHECKOUT" ]; then
   exit 0
 fi

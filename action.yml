@@ -37,7 +37,7 @@ inputs:
     required: false
     default: 'true'
   scan-config-url:
-    description: 'Base URL for hosted repo scan-config lookups'
+    description: 'Base URL for hosted repo scan-config lookups. Bearer-token fetches are restricted to the official Utensil API host.'
     required: false
     default: 'https://api.utensil.tools/api/scan-config'
   upload:
@@ -190,67 +190,40 @@ runs:
         UTENSIL_LICENSE_TOKEN: ${{ inputs.license-token }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
         UTENSIL_EXTERNAL_AUTHORSHIP_PROVENANCE_JSON: ${{ env.RESOLVED_PROVENANCE_JSON }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FULL: ${{ inputs.full }}
+        INPUT_DEBIAN_SUITE: ${{ inputs.debian-suite }}
+        INPUT_DEBIAN_ARCH: ${{ inputs.debian-arch }}
+        INPUT_NATIVE_RESOLVERS: ${{ inputs.native-resolvers }}
+        INPUT_FETCH_SCAN_CONFIG: ${{ inputs.fetch-scan-config }}
+        INPUT_SCAN_CONFIG_URL: ${{ inputs.scan-config-url }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_ARGS: ${{ inputs.args }}
+        INPUT_DIFF_ONLY: ${{ inputs.diff-only }}
+        REPO_OWNER: ${{ github.repository_owner }}
+        REPO_NAME: ${{ github.event.repository.name }}
+        REPO_FULL_NAME: ${{ github.repository }}
       run: |
-        ARGS="--json"
-        EFFECTIVE_DEBIAN_SUITE="${{ inputs.debian-suite }}"
-        EFFECTIVE_DEBIAN_ARCH="${{ inputs.debian-arch }}"
-        NATIVE_RESOLVERS_INPUT="${{ inputs.native-resolvers }}"
-        EFFECTIVE_NATIVE_RESOLVERS="$NATIVE_RESOLVERS_INPUT"
-        SCAN_TARGET_SOURCE=""
-        CONFIG_FETCH_STATUS="skipped"
+        if [ -z "${REPO_NAME:-}" ]; then REPO_NAME="${REPO_FULL_NAME#${REPO_OWNER}/}"; fi
 
-        if [ "${{ inputs.fetch-scan-config }}" = "true" ]; then
-          if [ -n "${UTENSIL_LICENSE_TOKEN:-}" ]; then
-            CONFIG_RESPONSE="${{ runner.temp }}/utensil-scan-config.json"
-            OWNER_PART="${{ github.repository_owner }}"
-            REPO_PART="${{ github.event.repository.name }}"
-            if [ -z "$REPO_PART" ]; then REPO_PART="${{ github.repository }}"; fi
-            REPO_PART="${REPO_PART#${OWNER_PART}/}"
-            set +e
-            CONFIG_HTTP_CODE=$(curl -sS --max-time 5 -o "$CONFIG_RESPONSE" -w "%{http_code}" \
-              -H "Authorization: Bearer $UTENSIL_LICENSE_TOKEN" \
-              "${{ inputs.scan-config-url }}/$OWNER_PART/$REPO_PART")
-            CONFIG_CURL_EXIT=$?
-            set -e
+        ACTION_PATH="${GITHUB_ACTION_PATH:-$PWD}"
+        CONFIG_JSON="$("$ACTION_PATH/scripts/resolve-scan-config.sh")"
+        EFFECTIVE_DEBIAN_SUITE=$(jq -r '.debianSuite // empty' <<< "$CONFIG_JSON")
+        EFFECTIVE_DEBIAN_ARCH=$(jq -r '.debianArch // empty' <<< "$CONFIG_JSON")
+        EFFECTIVE_NATIVE_RESOLVERS=$(jq -r 'if .nativeResolversEnabled == true then "true" else "false" end' <<< "$CONFIG_JSON")
+        SCAN_TARGET_SOURCE=$(jq -r '.scanTargetSource // empty' <<< "$CONFIG_JSON")
+        CONFIG_FETCH_STATUS=$(jq -r '.configFetchStatus // "skipped"' <<< "$CONFIG_JSON")
 
-            if [ "$CONFIG_CURL_EXIT" -eq 0 ] && [ "$CONFIG_HTTP_CODE" -eq 200 ]; then
-              if [ -z "$EFFECTIVE_DEBIAN_SUITE" ]; then
-                EFFECTIVE_DEBIAN_SUITE=$(jq -r '.debianSuite // empty' "$CONFIG_RESPONSE" 2>/dev/null || true)
-              fi
-              if [ -z "$EFFECTIVE_DEBIAN_ARCH" ]; then
-                EFFECTIVE_DEBIAN_ARCH=$(jq -r '.debianArch // empty' "$CONFIG_RESPONSE" 2>/dev/null || true)
-              fi
-              if [ -z "$NATIVE_RESOLVERS_INPUT" ]; then
-                EFFECTIVE_NATIVE_RESOLVERS=$(jq -r 'if .nativeResolversEnabled == true then "true" else "false" end' "$CONFIG_RESPONSE" 2>/dev/null || echo "false")
-              fi
-              CONFIG_FETCH_STATUS="fetched"
-            elif [ "$CONFIG_CURL_EXIT" -eq 0 ] && [ "$CONFIG_HTTP_CODE" -eq 404 ]; then
-              CONFIG_FETCH_STATUS="missing"
-            else
-              CONFIG_FETCH_STATUS="failed"
-            fi
-          else
-            CONFIG_FETCH_STATUS="skipped_no_token"
-          fi
-        fi
-
-        if [ -n "$EFFECTIVE_DEBIAN_SUITE" ] || [ -n "$EFFECTIVE_DEBIAN_ARCH" ]; then
-          if [ -n "${{ inputs.debian-suite }}" ] || [ -n "${{ inputs.debian-arch }}" ]; then
-            SCAN_TARGET_SOURCE="explicit"
-          elif [ "$CONFIG_FETCH_STATUS" = "fetched" ]; then
-            SCAN_TARGET_SOURCE="stored"
-          fi
-        fi
-
-        if [ "${{ inputs.full }}" = "true" ]; then ARGS="$ARGS --full"; fi
-        if [ -n "$EFFECTIVE_DEBIAN_SUITE" ]; then ARGS="$ARGS --debian-suite $EFFECTIVE_DEBIAN_SUITE"; fi
-        if [ -n "$EFFECTIVE_DEBIAN_ARCH" ]; then ARGS="$ARGS --debian-arch $EFFECTIVE_DEBIAN_ARCH"; fi
-        if [ "$EFFECTIVE_NATIVE_RESOLVERS" = "true" ]; then ARGS="$ARGS --native-resolvers"; fi
-        if [ -n "$SCAN_TARGET_SOURCE" ]; then ARGS="$ARGS --scan-target-source $SCAN_TARGET_SOURCE"; fi
-        if [ -n "${{ inputs.fail-on }}" ]; then ARGS="$ARGS --fail-on ${{ inputs.fail-on }}"; fi
+        args=(--json)
+        if [ "$INPUT_FULL" = "true" ]; then args+=(--full); fi
+        if [ -n "$EFFECTIVE_DEBIAN_SUITE" ]; then args+=(--debian-suite "$EFFECTIVE_DEBIAN_SUITE"); fi
+        if [ -n "$EFFECTIVE_DEBIAN_ARCH" ]; then args+=(--debian-arch "$EFFECTIVE_DEBIAN_ARCH"); fi
+        if [ "$EFFECTIVE_NATIVE_RESOLVERS" = "true" ]; then args+=(--native-resolvers); fi
+        if [ -n "$SCAN_TARGET_SOURCE" ]; then args+=(--scan-target-source "$SCAN_TARGET_SOURCE"); fi
+        if [ -n "$INPUT_FAIL_ON" ]; then args+=(--fail-on "$INPUT_FAIL_ON"); fi
         # PR comment is posted by the action after AI evaluation, not by the CLI
         # Diff-only mode: fetch changed files from GitHub API (no git history needed)
-        DIFF_ONLY="${{ inputs.diff-only }}"
+        DIFF_ONLY="$INPUT_DIFF_ONLY"
         PR_NUMBER="${{ github.event.pull_request.number }}"
         if [ "$DIFF_ONLY" = "auto" ]; then
           if [ -n "$PR_NUMBER" ]; then DIFF_ONLY="true"; else DIFF_ONLY="false"; fi
@@ -262,10 +235,13 @@ runs:
           FETCH_OK=true
           while true; do
             RESP_FILE="${{ runner.temp }}/pr-files-page-${PAGE}.json"
+            set +e
             HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w "%{http_code}" \
               -H "Authorization: token $GITHUB_TOKEN" \
               "https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER}/files?per_page=100&page=${PAGE}")
-            if [ $? -ne 0 ] || [ "$HTTP_CODE" -ne 200 ]; then
+            CURL_EXIT=$?
+            set -e
+            if [ "$CURL_EXIT" -ne 0 ] || [ "$HTTP_CODE" -ne 200 ]; then
               echo "::warning::GitHub API returned HTTP $HTTP_CODE fetching changed files. Running full scan."
               rm -f "$RESP_FILE" "$DIFF_FILE"
               FETCH_OK=false
@@ -278,16 +254,19 @@ runs:
             PAGE=$((PAGE + 1))
           done
           if [ "$FETCH_OK" = "true" ] && [ -s "$DIFF_FILE" ]; then
-            ARGS="$ARGS --diff-files $DIFF_FILE"
+            args+=(--diff-files "$DIFF_FILE")
           elif [ "$FETCH_OK" = "true" ]; then
-            ARGS="$ARGS --diff-files $DIFF_FILE"
+            args+=(--diff-files "$DIFF_FILE")
           fi
         fi
-        if [ -n "${{ inputs.args }}" ]; then ARGS="$ARGS ${{ inputs.args }}"; fi
+        if [ -n "$INPUT_ARGS" ]; then
+          read -r -a EXTRA_ARGS <<< "$INPUT_ARGS"
+          args+=("${EXTRA_ARGS[@]}")
+        fi
 
         REPORT_PATH="${{ runner.temp }}/utensil-report.json"
         set +e
-        utensil ${{ inputs.path }} $ARGS > "$REPORT_PATH" 2>/dev/null
+        utensil "$INPUT_PATH" "${args[@]}" > "$REPORT_PATH" 2>/dev/null
         EXIT_CODE=$?
         set -e
 
@@ -346,12 +325,14 @@ runs:
            '{metadata: {repo: $repo, ref: $ref, sha: $sha, run_id: $run_id, trigger: $trigger, source: $source, config_fetch_status: $config_fetch_status, uploaded_at: (now | todate)}, report: .}' \
            "$REPORT" > "$PAYLOAD"
 
+        set +e
         HTTP_CODE=$(curl -sS -o "$RESPONSE_PATH" -w "%{http_code}" \
           -X POST "${{ inputs.upload-url }}" \
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $UTENSIL_LICENSE_TOKEN" \
           --data-binary @"$PAYLOAD")
         CURL_EXIT=$?
+        set -e
 
         if [ $CURL_EXIT -ne 0 ] || [ -z "$HTTP_CODE" ]; then
           HTTP_CODE=000
