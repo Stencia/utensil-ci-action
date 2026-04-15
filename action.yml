@@ -23,6 +23,24 @@ inputs:
     description: 'Run all network-dependent checks (stale deps, license audit)'
     required: false
     default: 'false'
+  debian-suite:
+    description: 'Optional Debian suite override for packaging/security resolution (for example: bookworm)'
+    required: false
+  debian-arch:
+    description: 'Optional Debian architecture override (for example: amd64)'
+    required: false
+  native-resolvers:
+    description: 'Enable opt-in native dependency resolution when lockfiles are missing'
+    required: false
+    default: 'false'
+  fetch-scan-config:
+    description: 'Best-effort fetch of tenant-owned repo scan settings from Utensil before scanning'
+    required: false
+    default: 'true'
+  scan-config-url:
+    description: 'Base URL for hosted repo scan-config lookups'
+    required: false
+    default: 'https://api.utensil.tools/api/scan-config'
   upload:
     description: 'Upload results to Utensil API for dashboard and AI evaluation'
     required: false
@@ -71,6 +89,9 @@ outputs:
   report-json:
     description: 'Path to the JSON report file'
     value: ${{ steps.scan.outputs.report-path }}
+  config-fetch-status:
+    description: 'Status of the optional hosted scan-config fetch'
+    value: ${{ steps.scan.outputs.config-fetch-status }}
   vuln-count:
     description: 'Total vulnerability count'
     value: ${{ steps.parse.outputs.vuln-count }}
@@ -172,7 +193,60 @@ runs:
         UTENSIL_EXTERNAL_AUTHORSHIP_PROVENANCE_JSON: ${{ env.RESOLVED_PROVENANCE_JSON }}
       run: |
         ARGS="--json"
+        EFFECTIVE_DEBIAN_SUITE="${{ inputs.debian-suite }}"
+        EFFECTIVE_DEBIAN_ARCH="${{ inputs.debian-arch }}"
+        EFFECTIVE_NATIVE_RESOLVERS="${{ inputs.native-resolvers }}"
+        SCAN_TARGET_SOURCE=""
+        CONFIG_FETCH_STATUS="skipped"
+
+        if [ "${{ inputs.fetch-scan-config }}" = "true" ]; then
+          if [ -n "${UTENSIL_LICENSE_TOKEN:-}" ]; then
+            CONFIG_RESPONSE="${{ runner.temp }}/utensil-scan-config.json"
+            OWNER_PART="${{ github.repository_owner }}"
+            REPO_PART="${{ github.event.repository.name }}"
+            if [ -z "$REPO_PART" ]; then REPO_PART="${{ github.repository }}"; fi
+            REPO_PART="${REPO_PART#${OWNER_PART}/}"
+            set +e
+            CONFIG_HTTP_CODE=$(curl -sS --max-time 5 -o "$CONFIG_RESPONSE" -w "%{http_code}" \
+              -H "Authorization: Bearer $UTENSIL_LICENSE_TOKEN" \
+              "${{ inputs.scan-config-url }}/$OWNER_PART/$REPO_PART")
+            CONFIG_CURL_EXIT=$?
+            set -e
+
+            if [ "$CONFIG_CURL_EXIT" -eq 0 ] && [ "$CONFIG_HTTP_CODE" -eq 200 ]; then
+              if [ -z "$EFFECTIVE_DEBIAN_SUITE" ]; then
+                EFFECTIVE_DEBIAN_SUITE=$(jq -r '.debianSuite // empty' "$CONFIG_RESPONSE" 2>/dev/null || true)
+              fi
+              if [ -z "$EFFECTIVE_DEBIAN_ARCH" ]; then
+                EFFECTIVE_DEBIAN_ARCH=$(jq -r '.debianArch // empty' "$CONFIG_RESPONSE" 2>/dev/null || true)
+              fi
+              if [ "$EFFECTIVE_NATIVE_RESOLVERS" != "true" ]; then
+                EFFECTIVE_NATIVE_RESOLVERS=$(jq -r 'if .nativeResolversEnabled == true then "true" else "false" end' "$CONFIG_RESPONSE" 2>/dev/null || echo "false")
+              fi
+              CONFIG_FETCH_STATUS="fetched"
+            elif [ "$CONFIG_CURL_EXIT" -eq 0 ] && [ "$CONFIG_HTTP_CODE" -eq 404 ]; then
+              CONFIG_FETCH_STATUS="missing"
+            else
+              CONFIG_FETCH_STATUS="failed"
+            fi
+          else
+            CONFIG_FETCH_STATUS="skipped_no_token"
+          fi
+        fi
+
+        if [ -n "$EFFECTIVE_DEBIAN_SUITE" ] || [ -n "$EFFECTIVE_DEBIAN_ARCH" ]; then
+          if [ -n "${{ inputs.debian-suite }}" ] || [ -n "${{ inputs.debian-arch }}" ]; then
+            SCAN_TARGET_SOURCE="explicit"
+          elif [ "$CONFIG_FETCH_STATUS" = "fetched" ]; then
+            SCAN_TARGET_SOURCE="stored"
+          fi
+        fi
+
         if [ "${{ inputs.full }}" = "true" ]; then ARGS="$ARGS --full"; fi
+        if [ -n "$EFFECTIVE_DEBIAN_SUITE" ]; then ARGS="$ARGS --debian-suite $EFFECTIVE_DEBIAN_SUITE"; fi
+        if [ -n "$EFFECTIVE_DEBIAN_ARCH" ]; then ARGS="$ARGS --debian-arch $EFFECTIVE_DEBIAN_ARCH"; fi
+        if [ "$EFFECTIVE_NATIVE_RESOLVERS" = "true" ]; then ARGS="$ARGS --native-resolvers"; fi
+        if [ -n "$SCAN_TARGET_SOURCE" ]; then ARGS="$ARGS --scan-target-source $SCAN_TARGET_SOURCE"; fi
         if [ -n "${{ inputs.fail-on }}" ]; then ARGS="$ARGS --fail-on ${{ inputs.fail-on }}"; fi
         # PR comment is posted by the action after AI evaluation, not by the CLI
         # Diff-only mode: fetch changed files from GitHub API (no git history needed)
@@ -219,6 +293,7 @@ runs:
 
         echo "exit-code=$EXIT_CODE" >> $GITHUB_OUTPUT
         echo "report-path=$REPORT_PATH" >> $GITHUB_OUTPUT
+        echo "config-fetch-status=$CONFIG_FETCH_STATUS" >> $GITHUB_OUTPUT
 
         if [ $EXIT_CODE -eq 2 ]; then
           echo "::error::Utensil scan found findings exceeding --fail-on ${{ inputs.fail-on }} threshold"
@@ -266,7 +341,9 @@ runs:
            --arg sha "${{ github.sha }}" \
            --arg run_id "${{ github.run_id }}" \
            --arg trigger "${{ github.event_name }}" \
-           '{metadata: {repo: $repo, ref: $ref, sha: $sha, run_id: $run_id, trigger: $trigger, uploaded_at: (now | todate)}, report: .}' \
+           --arg source "ci" \
+           --arg config_fetch_status "${{ steps.scan.outputs.config-fetch-status }}" \
+           '{metadata: {repo: $repo, ref: $ref, sha: $sha, run_id: $run_id, trigger: $trigger, source: $source, config_fetch_status: $config_fetch_status, uploaded_at: (now | todate)}, report: .}' \
            "$REPORT" > "$PAYLOAD"
 
         HTTP_CODE=$(curl -sS -o "$RESPONSE_PATH" -w "%{http_code}" \
