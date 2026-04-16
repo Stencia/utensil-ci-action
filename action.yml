@@ -23,6 +23,19 @@ inputs:
     description: 'Run all network-dependent checks (stale deps, license audit)'
     required: false
     default: 'false'
+  debian-suite:
+    description: 'Optional Debian suite override for packaging/security resolution (for example: bookworm)'
+    required: false
+  debian-arch:
+    description: 'Optional Debian architecture override (for example: amd64)'
+    required: false
+  native-resolvers:
+    description: 'Enable native dependency resolution when lockfiles are missing; may execute code from the target repo'
+    required: false
+  fetch-scan-config:
+    description: 'Best-effort fetch of tenant-owned repo scan settings from Utensil before scanning'
+    required: false
+    default: 'true'
   upload:
     description: 'Upload results to Utensil API for dashboard and AI evaluation'
     required: false
@@ -36,7 +49,7 @@ inputs:
     required: false
     default: 'auto'
   args:
-    description: 'Additional CLI arguments (pass-through)'
+    description: 'Additional CLI arguments split on shell whitespace; quoted values containing spaces are not preserved'
     required: false
   authorship-provenance-json:
     description: 'Optional raw JSON object or array describing workflow/platform authorship provenance. Escape hatch for advanced cases (multiple entries, custom structural fields). When set, takes precedence over the ai-* typed inputs below.'
@@ -71,6 +84,9 @@ outputs:
   report-json:
     description: 'Path to the JSON report file'
     value: ${{ steps.scan.outputs.report-path }}
+  config-fetch-status:
+    description: 'Status of the optional hosted scan-config fetch'
+    value: ${{ steps.scan.outputs.config-fetch-status }}
   vuln-count:
     description: 'Total vulnerability count'
     value: ${{ steps.parse.outputs.vuln-count }}
@@ -170,13 +186,39 @@ runs:
         UTENSIL_LICENSE_TOKEN: ${{ inputs.license-token }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
         UTENSIL_EXTERNAL_AUTHORSHIP_PROVENANCE_JSON: ${{ env.RESOLVED_PROVENANCE_JSON }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FULL: ${{ inputs.full }}
+        INPUT_DEBIAN_SUITE: ${{ inputs.debian-suite }}
+        INPUT_DEBIAN_ARCH: ${{ inputs.debian-arch }}
+        INPUT_NATIVE_RESOLVERS: ${{ inputs.native-resolvers }}
+        INPUT_FETCH_SCAN_CONFIG: ${{ inputs.fetch-scan-config }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_ARGS: ${{ inputs.args }}
+        INPUT_DIFF_ONLY: ${{ inputs.diff-only }}
+        REPO_OWNER: ${{ github.repository_owner }}
+        REPO_NAME: ${{ github.event.repository.name }}
+        REPO_FULL_NAME: ${{ github.repository }}
       run: |
-        ARGS="--json"
-        if [ "${{ inputs.full }}" = "true" ]; then ARGS="$ARGS --full"; fi
-        if [ -n "${{ inputs.fail-on }}" ]; then ARGS="$ARGS --fail-on ${{ inputs.fail-on }}"; fi
+        if [ -z "${REPO_NAME:-}" ]; then REPO_NAME="${REPO_FULL_NAME#${REPO_OWNER}/}"; fi
+
+        ACTION_PATH="${GITHUB_ACTION_PATH:-$PWD}"
+        CONFIG_JSON="$("$ACTION_PATH/scripts/resolve-scan-config.sh")"
+        EFFECTIVE_DEBIAN_SUITE=$(jq -r '.debianSuite // empty' <<< "$CONFIG_JSON")
+        EFFECTIVE_DEBIAN_ARCH=$(jq -r '.debianArch // empty' <<< "$CONFIG_JSON")
+        EFFECTIVE_NATIVE_RESOLVERS=$(jq -r 'if .nativeResolversEnabled == true then "true" else "false" end' <<< "$CONFIG_JSON")
+        SCAN_TARGET_SOURCE=$(jq -r '.scanTargetSource // empty' <<< "$CONFIG_JSON")
+        CONFIG_FETCH_STATUS=$(jq -r '.configFetchStatus // "skipped"' <<< "$CONFIG_JSON")
+
+        args=(--json)
+        if [ "$INPUT_FULL" = "true" ]; then args+=(--full); fi
+        if [ -n "$EFFECTIVE_DEBIAN_SUITE" ]; then args+=(--debian-suite "$EFFECTIVE_DEBIAN_SUITE"); fi
+        if [ -n "$EFFECTIVE_DEBIAN_ARCH" ]; then args+=(--debian-arch "$EFFECTIVE_DEBIAN_ARCH"); fi
+        if [ "$EFFECTIVE_NATIVE_RESOLVERS" = "true" ]; then args+=(--native-resolvers); fi
+        if [ -n "$SCAN_TARGET_SOURCE" ]; then args+=(--scan-target-source "$SCAN_TARGET_SOURCE"); fi
+        if [ -n "$INPUT_FAIL_ON" ]; then args+=(--fail-on "$INPUT_FAIL_ON"); fi
         # PR comment is posted by the action after AI evaluation, not by the CLI
         # Diff-only mode: fetch changed files from GitHub API (no git history needed)
-        DIFF_ONLY="${{ inputs.diff-only }}"
+        DIFF_ONLY="$INPUT_DIFF_ONLY"
         PR_NUMBER="${{ github.event.pull_request.number }}"
         if [ "$DIFF_ONLY" = "auto" ]; then
           if [ -n "$PR_NUMBER" ]; then DIFF_ONLY="true"; else DIFF_ONLY="false"; fi
@@ -188,10 +230,13 @@ runs:
           FETCH_OK=true
           while true; do
             RESP_FILE="${{ runner.temp }}/pr-files-page-${PAGE}.json"
+            set +e
             HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w "%{http_code}" \
               -H "Authorization: token $GITHUB_TOKEN" \
               "https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER}/files?per_page=100&page=${PAGE}")
-            if [ $? -ne 0 ] || [ "$HTTP_CODE" -ne 200 ]; then
+            CURL_EXIT=$?
+            set -e
+            if [ "$CURL_EXIT" -ne 0 ] || [ "$HTTP_CODE" -ne 200 ]; then
               echo "::warning::GitHub API returned HTTP $HTTP_CODE fetching changed files. Running full scan."
               rm -f "$RESP_FILE" "$DIFF_FILE"
               FETCH_OK=false
@@ -204,21 +249,25 @@ runs:
             PAGE=$((PAGE + 1))
           done
           if [ "$FETCH_OK" = "true" ] && [ -s "$DIFF_FILE" ]; then
-            ARGS="$ARGS --diff-files $DIFF_FILE"
+            args+=(--diff-files "$DIFF_FILE")
           elif [ "$FETCH_OK" = "true" ]; then
-            ARGS="$ARGS --diff-files $DIFF_FILE"
+            args+=(--diff-files "$DIFF_FILE")
           fi
         fi
-        if [ -n "${{ inputs.args }}" ]; then ARGS="$ARGS ${{ inputs.args }}"; fi
+        if [ -n "$INPUT_ARGS" ]; then
+          read -r -a EXTRA_ARGS <<< "$INPUT_ARGS"
+          args+=("${EXTRA_ARGS[@]}")
+        fi
 
         REPORT_PATH="${{ runner.temp }}/utensil-report.json"
         set +e
-        utensil ${{ inputs.path }} $ARGS > "$REPORT_PATH" 2>/dev/null
+        utensil "$INPUT_PATH" "${args[@]}" > "$REPORT_PATH" 2>/dev/null
         EXIT_CODE=$?
         set -e
 
         echo "exit-code=$EXIT_CODE" >> $GITHUB_OUTPUT
         echo "report-path=$REPORT_PATH" >> $GITHUB_OUTPUT
+        echo "config-fetch-status=$CONFIG_FETCH_STATUS" >> $GITHUB_OUTPUT
 
         if [ $EXIT_CODE -eq 2 ]; then
           echo "::error::Utensil scan found findings exceeding --fail-on ${{ inputs.fail-on }} threshold"
@@ -266,15 +315,19 @@ runs:
            --arg sha "${{ github.sha }}" \
            --arg run_id "${{ github.run_id }}" \
            --arg trigger "${{ github.event_name }}" \
-           '{metadata: {repo: $repo, ref: $ref, sha: $sha, run_id: $run_id, trigger: $trigger, uploaded_at: (now | todate)}, report: .}' \
+           --arg source "ci" \
+           --arg config_fetch_status "${{ steps.scan.outputs.config-fetch-status }}" \
+           '{metadata: {repo: $repo, ref: $ref, sha: $sha, run_id: $run_id, trigger: $trigger, source: $source, config_fetch_status: $config_fetch_status, uploaded_at: (now | todate)}, report: .}' \
            "$REPORT" > "$PAYLOAD"
 
+        set +e
         HTTP_CODE=$(curl -sS -o "$RESPONSE_PATH" -w "%{http_code}" \
           -X POST "${{ inputs.upload-url }}" \
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $UTENSIL_LICENSE_TOKEN" \
           --data-binary @"$PAYLOAD")
         CURL_EXIT=$?
+        set -e
 
         if [ $CURL_EXIT -ne 0 ] || [ -z "$HTTP_CODE" ]; then
           HTTP_CODE=000

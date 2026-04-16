@@ -125,18 +125,18 @@ parse_report "$REPORT"
 if [ "$FINDING_COUNT" -gt 0 ]; then
   HAS_FINDINGS="true"
 else
-  HAS_FINDINGS=""
+  HAS_FINDINGS="false"
 fi
-[ "$HAS_FINDINGS" = "true" ] && pass "has-findings set when findings > 0" || fail "has-findings not set"
+[ "$HAS_FINDINGS" = "true" ] && pass "has-findings is true when findings > 0" || fail "expected has-findings=true, got $HAS_FINDINGS"
 
 REPORT=$(make_report '[]')
 parse_report "$REPORT"
 if [ "$FINDING_COUNT" -gt 0 ]; then
   HAS_FINDINGS="true"
 else
-  HAS_FINDINGS=""
+  HAS_FINDINGS="false"
 fi
-[ -z "$HAS_FINDINGS" ] && pass "has-findings empty when findings = 0" || fail "has-findings should be empty"
+[ "$HAS_FINDINGS" = "false" ] && pass "has-findings is false when findings = 0" || fail "expected has-findings=false, got $HAS_FINDINGS"
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

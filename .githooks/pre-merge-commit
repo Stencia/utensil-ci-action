@@ -1,0 +1,5 @@
+#!/bin/sh
+
+set -eu
+
+"$(dirname "$0")/_block_primary_main.sh"
