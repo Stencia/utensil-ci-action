@@ -15,12 +15,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run parse-results tests
         run: bash tests/test-parse-results.sh
+      - name: Run license-token diagnostics tests
+        run: bash tests/test-license-token-diagnostics.sh
       - name: Run scan-config resolution tests
         run: bash tests/test-scan-config-resolution.sh
 
   test-scan:
     runs-on: ubuntu-latest
     permissions:
+      checks: write
       contents: read
       pull-requests: write
     env:
