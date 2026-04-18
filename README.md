@@ -20,6 +20,19 @@ jobs:
           upload: "true"
 ```
 
+## Code composition analysis
+
+By default, the action runs `npm ci` (or `yarn install` / `pnpm install`) before scanning so the CLI's composition analyzer can count actual lines of code in your dependencies on disk. Without this step, the scanner estimates dependency LOC from the median of resolved packages, which significantly inflates the reported dependency footprint. The install step uses `--ignore-scripts` to avoid running postinstall hooks, and skips if `node_modules` already exists.
+
+Set `install-dependencies: 'false'` if your workflow installs dependencies separately or you want to skip composition analysis.
+
+```yaml
+      - uses: Stencia/utensil-ci-action@main
+        with:
+          license-token: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
+          install-dependencies: 'false'
+```
+
 ## Workflow authorship provenance
 
 Tell Utensil what produced the code being scanned. The most common case is an AI-assisted PR: set the `ai-*` typed inputs and the action assembles the right payload.

@@ -80,6 +80,10 @@ inputs:
   ai-agent-session-id:
     description: 'Optional AI agent session identifier'
     required: false
+  install-dependencies:
+    description: 'Install npm dependencies before scanning so code composition analysis can count actual LOC on disk. Skips install if node_modules already exists. Set to false if your workflow installs dependencies separately or you do not need composition analysis.'
+    required: false
+    default: 'true'
 
 outputs:
   exit-code:
@@ -182,6 +186,54 @@ runs:
            + (if $sessionId != "" then {agentSessionId: $sessionId} else {} end)')
         PAYLOAD=$(jq -nc --argjson entry "$ENTRY" '[$entry]')
         echo "RESOLVED_PROVENANCE_JSON=$PAYLOAD" >> "$GITHUB_ENV"
+
+    - name: Install dependencies for composition analysis
+      if: inputs.install-dependencies == 'true'
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+      run: |
+        # Install dependencies so CodeCompositionAnalyzer can count actual LOC on disk
+        # instead of estimating per-dependency LOC from the median of resolved deps.
+        # Without this step, node_modules is absent in CI and nearly every npm dep
+        # is marked unresolved, inflating the dependency footprint by an order of
+        # magnitude. See utensil-web PR #127 for context.
+        #
+        # Skips install if node_modules already exists (respects user-managed installs).
+        # Uses --ignore-scripts to avoid running postinstall hooks in CI.
+        # Failures are non-fatal: the scan still runs, just with unresolved estimates.
+
+        if [ -d "node_modules" ]; then
+          echo "node_modules already exists; skipping install."
+          exit 0
+        fi
+
+        if [ -f "package-lock.json" ]; then
+          echo "Running npm ci --ignore-scripts..."
+          if ! npm ci --ignore-scripts --no-audit --no-fund 2>&1 | tail -40; then
+            echo "::warning::npm ci failed. Composition analysis will use estimates for unresolved dependencies."
+          fi
+        elif [ -f "yarn.lock" ]; then
+          echo "Running yarn install --frozen-lockfile --ignore-scripts..."
+          if ! yarn install --frozen-lockfile --ignore-scripts 2>&1 | tail -40; then
+            echo "::warning::yarn install failed. Composition analysis will use estimates for unresolved dependencies."
+          fi
+        elif [ -f "pnpm-lock.yaml" ]; then
+          if ! command -v pnpm >/dev/null 2>&1; then
+            npm install -g pnpm@latest >/dev/null 2>&1 || true
+          fi
+          if command -v pnpm >/dev/null 2>&1; then
+            echo "Running pnpm install --frozen-lockfile --ignore-scripts..."
+            if ! pnpm install --frozen-lockfile --ignore-scripts 2>&1 | tail -40; then
+              echo "::warning::pnpm install failed. Composition analysis will use estimates for unresolved dependencies."
+            fi
+          else
+            echo "::warning::pnpm-lock.yaml found but pnpm could not be installed. Composition analysis will use estimates for unresolved dependencies."
+          fi
+        else
+          echo "No npm/yarn/pnpm lockfile found; skipping install."
+        fi
 
     - name: Run scan
       id: scan
