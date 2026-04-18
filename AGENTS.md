@@ -3,8 +3,12 @@
 ## Worktree Requirement
 
 - Always work from a git worktree on a branch that is not `main`.
-- Never make changes directly in the primary checkout.
-- Before editing files or running repo-affecting git commands, verify the current checkout with `git branch --show-current` and confirm you are inside the intended worktree.
+- Never make changes directly in the primary checkout, even if it is clean.
+- The isolation unit is a concurrent workstream or PR branch, not an individual commit. If multiple changes belong in the same branch/PR, keep them in the same dedicated worktree.
+- Create a new worktree when starting a separate branch/PR, when another agent may work in parallel, or when you need isolation from unrelated in-progress changes.
+- Before editing files or running repo-affecting git commands, run `git worktree list --porcelain` and `git branch --show-current` and confirm you are inside the intended worktree rather than the primary checkout.
+- Treat the primary checkout as read-only for development work.
+- After a PR is merged, delete its worktree when no further work remains on that branch.
 
 ## Sibling Repo Discovery
 
