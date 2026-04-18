@@ -80,6 +80,10 @@ inputs:
   ai-agent-session-id:
     description: 'Optional AI agent session identifier'
     required: false
+  install-dependencies:
+    description: 'Install npm dependencies before scanning so code composition analysis can count actual LOC on disk. Skips install if node_modules already exists. Set to false if your workflow installs dependencies separately or you do not need composition analysis.'
+    required: false
+    default: 'true'
 
 outputs:
   exit-code:
@@ -182,6 +186,20 @@ runs:
            + (if $sessionId != "" then {agentSessionId: $sessionId} else {} end)')
         PAYLOAD=$(jq -nc --argjson entry "$ENTRY" '[$entry]')
         echo "RESOLVED_PROVENANCE_JSON=$PAYLOAD" >> "$GITHUB_ENV"
+
+    - name: Install dependencies for composition analysis
+      if: inputs.install-dependencies == 'true'
+      shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        GITHUB_WORKSPACE: ${{ github.workspace }}
+      run: |
+        # Walks up from inputs.path to GITHUB_WORKSPACE to find a lockfile
+        # (so monorepo scans with inputs.path pointing at a package subdir
+        # pick up the workspace-root install). Handles Yarn 1 vs Yarn 2+
+        # (Berry) separately. Installs are non-fatal. See the script for
+        # the full rationale and the test suite in tests/ for coverage.
+        bash "${{ github.action_path }}/scripts/install-dependencies.sh"
 
     - name: Run scan
       id: scan
