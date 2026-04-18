@@ -8,6 +8,7 @@
 - Create a new worktree when starting a separate branch/PR, when another agent may work in parallel, or when you need isolation from unrelated in-progress changes.
 - Before editing files or running repo-affecting git commands, run `git worktree list --porcelain` and `git branch --show-current` and confirm you are inside the intended worktree rather than the primary checkout.
 - Treat the primary checkout as read-only for development work.
+- After a PR is merged, delete its worktree when no further work remains on that branch.
 
 ## Sibling Repo Discovery
 
