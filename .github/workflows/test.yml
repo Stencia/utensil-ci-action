@@ -19,6 +19,8 @@ jobs:
         run: bash tests/test-license-token-diagnostics.sh
       - name: Run scan-config resolution tests
         run: bash tests/test-scan-config-resolution.sh
+      - name: Run scan-arg assembly tests
+        run: bash tests/test-scan-args.sh
 
   test-scan:
     runs-on: ubuntu-latest

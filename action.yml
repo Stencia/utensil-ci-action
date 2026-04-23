@@ -256,6 +256,20 @@ runs:
           printf '%s' "$1" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//'
         }
 
+        extra_args_contain() {
+          local needle="$1"
+          local arg
+          if [ "${#EXTRA_ARGS[@]}" -eq 0 ]; then
+            return 1
+          fi
+          for arg in "${EXTRA_ARGS[@]}"; do
+            if [ "$arg" = "$needle" ]; then
+              return 0
+            fi
+          done
+          return 1
+        }
+
         token_deadline_iso() {
           local deadline="$1"
           if date -u -r "$deadline" '+%Y-%m-%dT%H:%M:%SZ' >/dev/null 2>&1; then
@@ -309,12 +323,17 @@ runs:
           fi
         }
 
+        EXTRA_ARGS=()
+        if [ -n "$INPUT_ARGS" ]; then
+          read -r -a EXTRA_ARGS <<< "$INPUT_ARGS"
+        fi
+
         args=(--json)
         if [ "$INPUT_FULL" = "true" ]; then args+=(--full); fi
-        if [ -n "$EFFECTIVE_DEBIAN_SUITE" ]; then args+=(--debian-suite "$EFFECTIVE_DEBIAN_SUITE"); fi
-        if [ -n "$EFFECTIVE_DEBIAN_ARCH" ]; then args+=(--debian-arch "$EFFECTIVE_DEBIAN_ARCH"); fi
-        if [ "$EFFECTIVE_NATIVE_RESOLVERS" = "true" ]; then args+=(--native-resolvers); fi
-        if [ -n "$SCAN_TARGET_SOURCE" ]; then args+=(--scan-target-source "$SCAN_TARGET_SOURCE"); fi
+        if [ -n "$EFFECTIVE_DEBIAN_SUITE" ] && ! extra_args_contain "--debian-suite"; then args+=(--debian-suite "$EFFECTIVE_DEBIAN_SUITE"); fi
+        if [ -n "$EFFECTIVE_DEBIAN_ARCH" ] && ! extra_args_contain "--debian-arch"; then args+=(--debian-arch "$EFFECTIVE_DEBIAN_ARCH"); fi
+        if [ "$EFFECTIVE_NATIVE_RESOLVERS" = "true" ] && ! extra_args_contain "--native-resolvers"; then args+=(--native-resolvers); fi
+        if [ -n "$SCAN_TARGET_SOURCE" ] && ! extra_args_contain "--scan-target-source"; then args+=(--scan-target-source "$SCAN_TARGET_SOURCE"); fi
         if [ -n "$INPUT_FAIL_ON" ]; then args+=(--fail-on "$INPUT_FAIL_ON"); fi
         # PR comment is posted by the action after AI evaluation, not by the CLI
         # Diff-only mode: fetch changed files from GitHub API (no git history needed)
@@ -354,8 +373,7 @@ runs:
             args+=(--diff-files "$DIFF_FILE")
           fi
         fi
-        if [ -n "$INPUT_ARGS" ]; then
-          read -r -a EXTRA_ARGS <<< "$INPUT_ARGS"
+        if [ "${#EXTRA_ARGS[@]}" -gt 0 ]; then
           args+=("${EXTRA_ARGS[@]}")
         fi
 
