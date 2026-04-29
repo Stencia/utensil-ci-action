@@ -500,6 +500,8 @@ runs:
         HEAD_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
         REPO="${{ github.repository }}"
         COMMENT_MARKER="<!-- utensil-pr-comment -->"
+        ACTION_PATH="${GITHUB_ACTION_PATH:-$PWD}"
+        FORMATTER_JQ="$ACTION_PATH/scripts/pr-comment-findings-table.jq"
 
         echo "has-actionable=false" >> $GITHUB_OUTPUT
 
@@ -536,9 +538,23 @@ runs:
             # Build findings table: only real_risk and context_dependent
             COMMENT+="| Rule | File | Severity | AI |"$'\n'
             COMMENT+="|------|------|----------|----|"$'\n'
-            while IFS=$'\t' read -r key filePath severity verdict; do
-              COMMENT+="| $key | $filePath | $severity | $verdict |"$'\n'
-            done < <(jq -r '.findings[]? | select(.aiVerdict == "real_risk" or .aiVerdict == "context_dependent") | [.key, (.filePath // ""), (.severity // ""), (if .aiVerdict == "real_risk" then "Risk" elif .aiVerdict == "context_dependent" then "Review" else "" end)] | @tsv' "$RESPONSE" 2>/dev/null)
+            # If this warning/formatting flow grows beyond these guard branches,
+            # extract it into a helper script so the stdout/stderr/exit paths can
+            # be unit-tested with injected jq/formatter failures.
+            if [ ! -f "$FORMATTER_JQ" ]; then
+              echo "::warning::Missing PR comment formatter script at $FORMATTER_JQ"
+            elif ! TABLE_ROWS=$(jq -r -f "$FORMATTER_JQ" "$RESPONSE"); then
+              echo "::warning::Failed to render PR comment findings table with $FORMATTER_JQ"
+            else
+              while IFS=$'\t' read -r ruleLabel filePath severity verdict; do
+                [ -z "${ruleLabel}${filePath}${severity}${verdict}" ] && continue
+                ruleLabel=${ruleLabel//|/\\|}
+                filePath=${filePath//|/\\|}
+                severity=${severity//|/\\|}
+                verdict=${verdict//|/\\|}
+                COMMENT+="| $ruleLabel | $filePath | $severity | $verdict |"$'\n'
+              done <<< "$TABLE_ROWS"
+            fi
           fi
 
           COMMENT+="---"$'\n'

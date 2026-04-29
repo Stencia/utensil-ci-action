@@ -17,6 +17,10 @@ jobs:
         run: bash tests/test-parse-results.sh
       - name: Run license-token diagnostics tests
         run: bash tests/test-license-token-diagnostics.sh
+      - name: Run PR comment format tests
+        run: bash tests/test-pr-comment-format.sh
+      - name: Run PR comment warning-path tests
+        run: bash tests/test-pr-comment-warning-paths.sh
       - name: Run scan-config resolution tests
         run: bash tests/test-scan-config-resolution.sh
       - name: Run scan-arg assembly tests
