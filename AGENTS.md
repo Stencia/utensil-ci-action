@@ -32,6 +32,17 @@
 - If an epic appears complete in GitHub but the user identifies a concrete remaining gap, treat the epic as still in flight until that gap is either implemented, explicitly deferred, or the tracker is corrected.
 - Only suggest a brand-new track when the active epic is actually complete, explicitly parked by the user, or blocked hard enough that the user asks to switch.
 
+## Issue Assignment
+
+- Treat any pre-existing GitHub assignee on an issue as proof that another agent is already working that issue.
+- Do not choose, start, or continue an assigned issue unless the user explicitly tells you to take over or collaborate on that specific assigned issue.
+- When asked "what's next", exclude assigned issues from candidate next steps unless the user explicitly names one.
+- If an issue is unassigned and you are about to start it, assign it to yourself first.
+- Do not start implementation, branch work, or substantial issue-specific investigation until that self-assignment is in place.
+- The agent that just assigned an unassigned issue to itself may continue that issue in the same workstream; the guardrail is against taking issues that were already assigned before you started.
+- When working a sequence of issues, assign each issue at the moment you are about to start that issue, not retroactively after work has begun.
+- Treat assignment state as a hard concurrency guardrail, not a soft planning hint.
+
 ## Upload vs Publish Paths
 
 - Treat "upload" as ambiguous until the target surface is clear. There are two different paths:
