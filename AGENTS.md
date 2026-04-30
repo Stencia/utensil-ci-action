@@ -10,6 +10,13 @@
 - Treat the primary checkout as read-only for development work.
 - After a PR is merged, delete its worktree when no further work remains on that branch.
 
+## Issue Assignment
+
+- Before starting work on any tracked GitHub issue, assign the issue to yourself.
+- Verify the live GitHub issue state shows you as the assignee before implementation, PR creation, or review-loop work begins.
+- Do not start work on an issue that is assigned to someone else unless the user explicitly directs that handoff or the assignment is changed first.
+- When the user asks for multiple issues to be done sequentially, assign each issue before taking it so parallel agents do not collide on the same work.
+
 ## Sibling Repo Discovery
 
 - When a task refers to "all Utensil repos", use the directory named by `UTENSIL_ALL_REPOS` as the source of truth. If unset, use a local symlink inventory such as `~/code/utensil-all`.
