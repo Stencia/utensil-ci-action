@@ -65,6 +65,12 @@
 - Do not leave addressed threads unresolved just because a generic GitHub skill says thread resolution requires a separate explicit ask. This repo-local rule overrides that default.
 - Do not resolve threads that are only partially addressed, ambiguous, or still need a substantive reply. Summarize those cases instead.
 
+## PR Creation Default
+
+- When the user says `go`, `implement`, `yes`, or otherwise authorizes tracked issue, epic, or planned work, treat that as authorization to carry the work through local verification, PR creation or update, and PR review convergence unless they explicitly say to stop before PR creation.
+- Do not stop at "implementation is done locally" for tracked work when the expected outcome is a landed PR. After relevant verification succeeds, create or update the PR instead of waiting for a separate prompt to do so.
+- Once the PR exists, continue the review-follow-up loop on the live PR head: gather review feedback, fix validated findings, rerun verification, push, and repeat until no actionable PR-attributable findings remain or the user redirects the work.
+
 ## CI Failure Reproduction
 
 - When a GitHub Actions failure is specific to the Linux CLI workflow, reproduce and verify it in a Linux environment first.
