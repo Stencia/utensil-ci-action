@@ -32,6 +32,14 @@
 - If an epic appears complete in GitHub but the user identifies a concrete remaining gap, treat the epic as still in flight until that gap is either implemented, explicitly deferred, or the tracker is corrected.
 - Only suggest a brand-new track when the active epic is actually complete, explicitly parked by the user, or blocked hard enough that the user asks to switch.
 
+## Issue Consolidation
+
+- Before opening a new follow-up issue, check whether an existing open epic, parent issue, or prior follow-up already covers the remaining work closely enough to absorb it.
+- Prefer consolidating residual work into one tracked follow-up issue under the existing epic or parent issue instead of creating multiple new issues from each recently closed child issue or PR.
+- Do not create multiple new follow-up issues from a single closed issue or PR unless the user explicitly asks for that split or the work truly needs distinct ownership or execution tracks.
+- Minor review findings, polish items, and residual hardening work should usually be recorded in an existing follow-up issue rather than spun out into separate new tickets.
+- If a minor point does not deserve code work or a new ticket, record that triage explicitly in the relevant issue or PR context so it is consciously dismissed rather than forgotten.
+
 ## Upload vs Publish Paths
 
 - Treat "upload" as ambiguous until the target surface is clear. There are two different paths:
