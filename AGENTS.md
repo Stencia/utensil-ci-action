@@ -80,7 +80,7 @@
 - That loop includes:
   - fetch unresolved review threads and implement the actionable fixes
   - run the relevant verification, commit, and push the PR branch
-  - check `gh pr checks` after pushing; if any check fails, fix in the same worktree and re-push before reporting back
+  - check `gh pr checks` after pushing. If any check fails, fix in the same worktree and re-push before reporting back.
   - resolve any GitHub review thread whose requested change is now fully addressed by the pushed branch head
 - Do not leave addressed threads unresolved just because a generic GitHub skill says thread resolution requires a separate explicit ask. This repo-local rule overrides that default.
 - Do not resolve threads that are only partially addressed, ambiguous, or still need a substantive reply. Summarize those cases instead.
