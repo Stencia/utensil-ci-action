@@ -58,10 +58,10 @@
   - **Public repo library / benchmark publish:** Open-source repos that should appear alongside Signal and the benchmark corpus do **not** use the workspace upload-grant path. They are scanned locally, ingested through `utensil-benchmark`, and then surfaced through the benchmark/web data path.
 - Do not treat a workspace grant failure for an open-source repo as a product blocker if the actual goal is to add that repo to the public library.
 - Before attempting any public-library publish for a new repo, first compare the current CLI report with a direct inspection of the repo itself.
-- That comparison should happen before any ingest/publish step, and it should be done in parallel when practical:
+- That comparison should happen before any ingest/publish step. Run these two in parallel when practical:
   - run the current CLI against the repo
   - inspect the repo directly (dependency manifests, package stanzas, local packages, obvious scope/coverage expectations)
-  - compare the two results and only then decide whether the repo is ready for benchmark/public-library ingestion
+- Then compare the two results and decide whether the repo is ready for benchmark/public-library ingestion.
 
 ## PR Cleanup
 
@@ -69,7 +69,7 @@
 - "Clean up" means:
   - remove PR-specific review or implementation worktrees for that merged PR
   - delete the corresponding local git branches after the worktrees are removed
-  - delete the remote head branch too when it still exists and clearly belongs to the merged PR
+  - delete the remote head branch when it still exists, the merge commit on the base contains its work, and there are no commits on the remote branch beyond what was merged
 - Before deleting anything, verify which worktree and branch map to the merged PR so unrelated branches are not removed by mistake.
 
 ## PR Feedback
@@ -80,6 +80,7 @@
 - That loop includes:
   - fetch unresolved review threads and implement the actionable fixes
   - run the relevant verification, commit, and push the PR branch
+  - check `gh pr checks` after pushing. If any check fails, fix in the same worktree and re-push before reporting back.
   - resolve any GitHub review thread whose requested change is now fully addressed by the pushed branch head
 - Do not leave addressed threads unresolved just because a generic GitHub skill says thread resolution requires a separate explicit ask. This repo-local rule overrides that default.
 - Do not resolve threads that are only partially addressed, ambiguous, or still need a substantive reply. Summarize those cases instead.
