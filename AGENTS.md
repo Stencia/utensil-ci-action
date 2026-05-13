@@ -85,6 +85,15 @@
 - Do not leave addressed threads unresolved just because a generic GitHub skill says thread resolution requires a separate explicit ask. This repo-local rule overrides that default.
 - Do not resolve threads that are only partially addressed, ambiguous, or still need a substantive reply. Summarize those cases instead.
 
+## PR Review Closeout Language
+
+- Treat the live PR title, body, description, and stated open questions as part of the reviewable PR surface, alongside changed files and review threads.
+- If the PR description is stale, contradictory, or leaves an open question that the implementation or document already answers, report that as a review finding or explicit merge-readiness issue. Do not say "no findings remain" while that issue is still present.
+- Reserve an unqualified "no findings remain" for cases where the reviewable PR surface has been checked and no PR-attributable issues remain.
+- If only changed files or only prior inline findings were rechecked, qualify the result precisely, for example "no code findings remain; PR description and merge blockers were not checked."
+- Keep non-finding merge blockers distinct: draft status, failing or pending CI, merge conflicts, and missing approvals are merge blockers, not review findings. Report them separately as blockers; do not let them change the finding count or hide reviewable issues.
+- Say a PR is ready to merge only when no review findings remain and no known merge blockers remain.
+
 ## PR Creation Default
 
 - When the user says `go`, `implement`, `yes`, or otherwise authorizes tracked issue, epic, or planned work, treat that as authorization to carry the work through local verification, PR creation or update, and PR review convergence unless they explicitly say to stop before PR creation.
