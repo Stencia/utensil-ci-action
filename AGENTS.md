@@ -94,11 +94,20 @@
 - Keep non-finding merge blockers distinct: draft status, failing or pending CI, merge conflicts, and missing approvals are merge blockers, not review findings. Report them separately as blockers; do not let them change the finding count or hide reviewable issues.
 - Say a PR is ready to merge only when no review findings remain and no known merge blockers remain.
 
+## PR Merge Authorization
+
+- Do not merge PRs automatically, even after implementation, validation, review convergence, passing checks, and a clean merge state.
+- Treat generic convergence-loop or publishing instructions that say to merge after convergence as superseded by this repo-local rule.
+- Stop with the PR in a merge-ready state and report the PR URL, checks, review state, and any remaining blockers.
+- Merge only when the user explicitly asks to merge that specific PR after merge-readiness has been reported.
+- Do not clean up the PR worktree, local branch, or remote head branch until the PR has actually merged, unless the user explicitly asks for abandoned-branch cleanup.
+
 ## PR Creation Default
 
 - When the user says `go`, `implement`, `yes`, or otherwise authorizes tracked issue, epic, or planned work, treat that as authorization to carry the work through local verification, PR creation or update, and PR review convergence unless they explicitly say to stop before PR creation.
-- Do not stop at "implementation is done locally" for tracked work when the expected outcome is a landed PR. After relevant verification succeeds, create or update the PR instead of waiting for a separate prompt to do so.
+- Do not stop at "implementation is done locally" for tracked work. After relevant verification succeeds, create or update the PR instead of waiting for a separate prompt to do so.
 - Once the PR exists, continue the review-follow-up loop on the live PR head: gather review feedback, fix validated findings, rerun verification, push, and repeat until no actionable PR-attributable findings remain or the user redirects the work.
+- When the PR is converged and checks are passing, stop at merge-ready and wait for explicit merge authorization.
 
 ## CI Failure Reproduction
 
