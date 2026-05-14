@@ -77,15 +77,15 @@ Upload failure is non-fatal. The workflow emits a warning because dashboard inge
 
 ## PR Comment Contract
 
-The Action owns the self-hosted Action PR comment, not the hosted GitHub App comment.
+The Action owns the self-hosted Action PR comment, not the hosted GitHub App comment. The current implementation is upload-response driven: the comment step runs only when `upload: "true"` and dashboard ingest returns a response path, because the comment uses server-side AI verdicts from that response. When upload is disabled or upload fails, the Action does not create, update, or delete the PR comment.
 
 Requirements:
 
-- use a stable hidden marker so repeated runs update the existing comment
-- skip creating a comment when the scan has nothing to report
-- delete a stale prior comment when a later run is clean
+- use a stable hidden marker so repeated upload-backed runs update the existing comment
+- skip creating a comment when the upload-backed response has nothing to report
+- delete a stale prior comment when a later upload-backed response is clean
 - render finding labels in human-readable form
-- keep upload response handling separate from comment rendering failures
+- treat comment rendering or posting failures as non-fatal once an upload response exists
 
 The Action does not perform server-side semantic AI evaluation itself. It posts the information available through the report and upload response.
 
