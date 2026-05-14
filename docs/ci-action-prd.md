@@ -13,7 +13,7 @@ This document covers the Action contract: workflow inputs, scan setup, upload be
 
 The Action lets a repository run the Utensil CLI inside its own GitHub Actions runner. It supports two user-facing modes:
 
-1. **PR review:** run on `pull_request`, scan the PR head, default to changed files, upload the report, and create/update a concise PR comment when there is something to report.
+1. **PR review:** run on `pull_request`, scan the checked-out workspace, default to PR changed files, upload the report, and create/update a concise PR comment when there is something to report. In normal workflows the checked-out workspace is the PR head because `actions/checkout` controls that checkout.
 2. **Full scan:** run on `schedule`, `workflow_dispatch`, or branch workflows, scan the requested path or full repo, and optionally upload the report to the Utensil dashboard.
 
 The Action is intentionally distinct from the hosted GitHub App runner in `utensil-scan-service`. Installing the App does not install this Action, and adding this Action does not use Utensil-hosted compute.
@@ -49,7 +49,7 @@ The Action assembles CLI arguments from typed inputs:
 - `path` selects the repo or subdirectory to scan.
 - `full` controls full-repo CLI mode.
 - `fail-on` passes through to the CLI and converts matching findings into an Action failure.
-- `debian-suite`, `debian-arch`, `native-resolvers`, and hosted scan-config values alter scanner scope and must be reflected in uploaded metadata.
+- `debian-suite`, `debian-arch`, `native-resolvers`, and hosted scan-config values alter scanner scope. Upload metadata records config fetch status; scan target details belong in the CLI report payload when the CLI emits them.
 - `args` remains an escape hatch and should not silently override explicit typed inputs except through normal CLI argument precedence.
 
 On pull request events, `diff-only` defaults to changed-file scanning. The Action obtains changed files from the GitHub API using the provided `github-token`. If changed-file discovery fails, it warns and falls back to a full scan rather than silently skipping the scan.
@@ -70,7 +70,7 @@ Users can set `install-dependencies: "false"` when their workflow already instal
 When `upload: "true"`, the Action POSTs the CLI JSON report to `upload-url` with:
 
 - GitHub metadata: repo, ref, sha, run ID, trigger, and source
-- scan-config metadata: config fetch status and scan target source
+- scan-config metadata: config fetch status
 - report payload from the CLI
 
 Upload failure is non-fatal. The workflow emits a warning because dashboard ingestion should not block a repository's CI unless the customer explicitly adds their own policy around it.
@@ -104,9 +104,8 @@ Raw JSON wins over typed inputs. The resolved payload is passed to the CLI throu
 
 ## Hosted Scan Config
 
-`fetch-scan-config` is best-effort. When enabled, the Action asks Utensil for tenant-owned scan target settings before scanning. Success or failure is reported through Action outputs and upload metadata. A failed config fetch does not skip the scan; the local workflow inputs remain authoritative.
+`fetch-scan-config` is best-effort. When enabled, the Action asks Utensil for tenant-owned scan target settings before scanning. Success or failure is reported through Action outputs and upload metadata; target-source details remain part of the CLI/config report surface when available. A failed config fetch does not skip the scan; the local workflow inputs remain authoritative.
 
 ## PRD Maintenance
 
 Future behavior-changing PRs in this repo should update this file or explicitly cite the canonical `Utensil` PRD that already covers the behavior.
-
