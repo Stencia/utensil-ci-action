@@ -2,6 +2,8 @@
 
 GitHub Action for running the Utensil CLI in CI, optionally uploading results to the Utensil dashboard, and posting PR findings metadata.
 
+Product and workflow behavior is specified in [docs/ci-action-prd.md](docs/ci-action-prd.md). The shared cross-surface PR review model lives in the main Utensil repo.
+
 ## Basic usage
 
 ```yaml
