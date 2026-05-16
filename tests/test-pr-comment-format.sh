@@ -185,7 +185,7 @@ RESPONSE=$(make_response '[
   }
 ]')
 ROWS=$(comment_rows_with_actions "$RESPONSE")
-EXPECTED=$(printf 'Email address\tscripts/test_export_data.py:41\tlow\tReview\t[Dismiss](%s/my-repos?repo=acme%%2Fwidgets&dismissRule=piiEmail&dismissFile=scripts%%2Ftest_export_data.py&dismissLine=41)' "$TEST_DASHBOARD_URL")
+EXPECTED=$(printf 'Email address\tscripts/test_export_data.py:41\tlow\tReview\t[False positive](%s/my-repos?repo=acme%%2Fwidgets&dismissRule=piiEmail&dismissFile=scripts%%2Ftest_export_data.py&dismissLine=41)' "$TEST_DASHBOARD_URL")
 [[ "$ROWS" == "$EXPECTED" ]] \
   && pass "builds a per-finding dismiss deep link" \
   || fail "expected dismiss-link row, got: $ROWS"

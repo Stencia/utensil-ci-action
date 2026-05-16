@@ -542,8 +542,8 @@ runs:
             COMMENT+=$'\n'$'\n'
 
             # Build findings table: only real_risk and context_dependent
-            COMMENT+="| Rule | File | Severity | AI | Dismiss |"$'\n'
-            COMMENT+="|------|------|----------|----|---------|"$'\n'
+            COMMENT+="| Rule | File | Severity | AI | False positive |"$'\n'
+            COMMENT+="|------|------|----------|----|----------------|"$'\n'
             # If this warning/formatting flow grows beyond these guard branches,
             # extract it into a helper script so the stdout/stderr/exit paths can
             # be unit-tested with injected jq/formatter failures.

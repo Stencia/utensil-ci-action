@@ -20,7 +20,7 @@ def dismiss_link($dashboard_url; $repo):
   | if ($base | length) == 0 or ($params | length) == 0 then
       ""
     else
-      "[Dismiss](\($base)/my-repos?\($params | join("&")))"
+      "[False positive](\($base)/my-repos?\($params | join("&")))"
     end;
 
 def file_location:
