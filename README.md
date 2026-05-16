@@ -4,6 +4,8 @@ GitHub Action for running the Utensil CLI in CI, optionally uploading results to
 
 Product and workflow behavior is specified in [docs/ci-action-prd.md](docs/ci-action-prd.md). The shared cross-surface PR review model lives in the main Utensil repo.
 
+When `upload: "true"` and PR comments are enabled, each actionable code-pattern row includes a dashboard `Dismiss` link with the repository, rule, file, and line encoded in the URL so reviewers can mark false positives from the Utensil dashboard without manually searching for the finding. Set `dashboard-url` if your workflow uploads to a self-hosted Utensil web surface.
+
 ## Basic usage
 
 ```yaml

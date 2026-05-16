@@ -52,7 +52,7 @@ run_warning_guard() {
   local runner="$1"
   local response="$2"
   local formatter="$3"
-  RESPONSE="$response" FORMATTER_JQ="$formatter" COMMENT="seed" bash "$runner" 2>&1
+  RESPONSE="$response" FORMATTER_JQ="$formatter" COMMENT="seed" REPO="acme/widgets" DASHBOARD_URL="https://utensil.tools" bash "$runner" 2>&1
 }
 
 echo "PR comment warning-path tests"

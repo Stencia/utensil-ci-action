@@ -48,6 +48,10 @@ inputs:
     description: 'Ingest endpoint URL'
     required: false
     default: 'https://api.utensil.tools/api/ingest'
+  dashboard-url:
+    description: 'Utensil dashboard base URL used for PR comment links'
+    required: false
+    default: 'https://utensil.tools'
   diff-only:
     description: 'Only report findings on files changed in this PR. Auto-enabled on pull_request events. Set to false to see all findings.'
     required: false
@@ -502,6 +506,8 @@ runs:
         COMMENT_MARKER="<!-- utensil-pr-comment -->"
         ACTION_PATH="${GITHUB_ACTION_PATH:-$PWD}"
         FORMATTER_JQ="$ACTION_PATH/scripts/pr-comment-findings-table.jq"
+        DASHBOARD_URL="${{ inputs.dashboard-url }}"
+        DASHBOARD_URL="${DASHBOARD_URL%/}"
 
         echo "has-actionable=false" >> $GITHUB_OUTPUT
 
@@ -536,23 +542,24 @@ runs:
             COMMENT+=$'\n'$'\n'
 
             # Build findings table: only real_risk and context_dependent
-            COMMENT+="| Rule | File | Severity | AI |"$'\n'
-            COMMENT+="|------|------|----------|----|"$'\n'
+            COMMENT+="| Rule | File | Severity | AI | False positive |"$'\n'
+            COMMENT+="|------|------|----------|----|----------------|"$'\n'
             # If this warning/formatting flow grows beyond these guard branches,
             # extract it into a helper script so the stdout/stderr/exit paths can
             # be unit-tested with injected jq/formatter failures.
             if [ ! -f "$FORMATTER_JQ" ]; then
               echo "::warning::Missing PR comment formatter script at $FORMATTER_JQ"
-            elif ! TABLE_ROWS=$(jq -r -f "$FORMATTER_JQ" "$RESPONSE"); then
+            elif ! TABLE_ROWS=$(jq -r --arg repo "$REPO" --arg dashboard_url "$DASHBOARD_URL" -f "$FORMATTER_JQ" "$RESPONSE"); then
               echo "::warning::Failed to render PR comment findings table with $FORMATTER_JQ"
             else
-              while IFS=$'\t' read -r ruleLabel filePath severity verdict; do
-                [ -z "${ruleLabel}${filePath}${severity}${verdict}" ] && continue
+              while IFS=$'\t' read -r ruleLabel filePath severity verdict dismissLink; do
+                [ -z "${ruleLabel}${filePath}${severity}${verdict}${dismissLink}" ] && continue
                 ruleLabel=${ruleLabel//|/\\|}
                 filePath=${filePath//|/\\|}
                 severity=${severity//|/\\|}
                 verdict=${verdict//|/\\|}
-                COMMENT+="| $ruleLabel | $filePath | $severity | $verdict |"$'\n'
+                dismissLink=${dismissLink//|/\\|}
+                COMMENT+="| $ruleLabel | $filePath | $severity | $verdict | $dismissLink |"$'\n'
               done <<< "$TABLE_ROWS"
             fi
           fi

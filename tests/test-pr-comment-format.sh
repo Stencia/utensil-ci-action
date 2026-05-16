@@ -13,6 +13,8 @@ fail() { FAIL=$((FAIL + 1)); echo "  FAIL: $1"; }
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TEST_REPO="acme/widgets"
+TEST_DASHBOARD_URL="https://utensil.tools"
 
 make_response() {
   local findings="$1"
@@ -26,13 +28,25 @@ RESPONSE_EOF
 
 comment_rows() {
   local response="$1"
-  while IFS=$'\t' read -r ruleLabel filePath severity verdict; do
+  while IFS=$'\t' read -r ruleLabel filePath severity verdict dismissLink; do
     ruleLabel=${ruleLabel//|/\\|}
     filePath=${filePath//|/\\|}
     severity=${severity//|/\\|}
     verdict=${verdict//|/\\|}
     printf '%s\t%s\t%s\t%s\n' "$ruleLabel" "$filePath" "$severity" "$verdict"
-  done < <(jq -r -f "$REPO_ROOT/scripts/pr-comment-findings-table.jq" "$response")
+  done < <(jq -r --arg repo "$TEST_REPO" --arg dashboard_url "$TEST_DASHBOARD_URL" -f "$REPO_ROOT/scripts/pr-comment-findings-table.jq" "$response")
+}
+
+comment_rows_with_actions() {
+  local response="$1"
+  while IFS=$'\t' read -r ruleLabel filePath severity verdict dismissLink; do
+    ruleLabel=${ruleLabel//|/\\|}
+    filePath=${filePath//|/\\|}
+    severity=${severity//|/\\|}
+    verdict=${verdict//|/\\|}
+    dismissLink=${dismissLink//|/\\|}
+    printf '%s\t%s\t%s\t%s\t%s\n' "$ruleLabel" "$filePath" "$severity" "$verdict" "$dismissLink"
+  done < <(jq -r --arg repo "$TEST_REPO" --arg dashboard_url "$TEST_DASHBOARD_URL" -f "$REPO_ROOT/scripts/pr-comment-findings-table.jq" "$response")
 }
 
 echo "PR comment format tests"
@@ -155,6 +169,26 @@ ROWS=$(comment_rows "$RESPONSE")
 [[ "$ROWS" == $'PII \\| secrets summary\tdocs/notes.md\tmedium\tReview' ]] \
   && pass "escapes markdown pipes and flattens line breaks" \
   || fail "expected sanitized markdown cell, got: $ROWS"
+
+echo ""
+echo "Dismiss links include dashboard repo and finding identity:"
+RESPONSE=$(make_response '[
+  {
+    "key": "piiEmail",
+    "filePath": "scripts/test_export_data.py",
+    "lineNumber": 41,
+    "severity": "low",
+    "aiVerdict": "context_dependent",
+    "evidence": [
+      {"type": "inference", "reason": "Severity: Low. Email address"}
+    ]
+  }
+]')
+ROWS=$(comment_rows_with_actions "$RESPONSE")
+EXPECTED=$(printf 'Email address\tscripts/test_export_data.py:41\tlow\tReview\t[False positive](%s/my-repos?repo=acme%%2Fwidgets&dismissRule=piiEmail&dismissFile=scripts%%2Ftest_export_data.py&dismissLine=41)' "$TEST_DASHBOARD_URL")
+[[ "$ROWS" == "$EXPECTED" ]] \
+  && pass "builds a per-finding dismiss deep link" \
+  || fail "expected dismiss-link row, got: $ROWS"
 
 echo ""
 echo "Only actionable verdicts render table rows:"
