@@ -85,6 +85,7 @@ Requirements:
 - skip creating a comment when the upload-backed response has nothing to report
 - delete a stale prior comment when a later upload-backed response is clean
 - render finding labels in human-readable form
+- include a per-finding dashboard `Dismiss` link for actionable code-pattern findings, carrying repo, rule, file, and line context in the URL
 - treat comment rendering or posting failures as non-fatal once an upload response exists
 
 The Action does not perform server-side semantic AI evaluation itself. It posts the information available through the report and upload response.

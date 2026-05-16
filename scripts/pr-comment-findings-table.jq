@@ -2,6 +2,37 @@ def markdown_table_cell:
   tostring
   | gsub("[\\r\\n\\t]+"; " ");
 
+def url_param($name; $value):
+  if $value == null or ($value | tostring | length) == 0 then
+    empty
+  else
+    "\($name)=\($value | tostring | @uri)"
+  end;
+
+def dismiss_link($dashboard_url; $repo):
+  ($dashboard_url | sub("/+$"; "")) as $base
+  | [
+      url_param("repo"; $repo),
+      url_param("dismissRule"; .key),
+      url_param("dismissFile"; .filePath),
+      url_param("dismissLine"; .lineNumber)
+    ] as $params
+  | if ($base | length) == 0 or ($params | length) == 0 then
+      ""
+    else
+      "[Dismiss](\($base)/my-repos?\($params | join("&")))"
+    end;
+
+def file_location:
+  (.filePath // "") as $file
+  | if ($file | length) == 0 then
+      ""
+    elif .lineNumber == null then
+      $file
+    else
+      "\($file):\(.lineNumber)"
+    end;
+
 def inferred_rule_label:
   (
     [.evidence[]?
@@ -33,8 +64,9 @@ def rule_label:
 | select(.aiVerdict == "real_risk" or .aiVerdict == "context_dependent")
 | [
     (rule_label | markdown_table_cell),
-    ((.filePath // "") | markdown_table_cell),
+    (file_location | markdown_table_cell),
     ((.severity // "") | markdown_table_cell),
-    ((if .aiVerdict == "real_risk" then "Risk" elif .aiVerdict == "context_dependent" then "Review" else "" end) | markdown_table_cell)
+    ((if .aiVerdict == "real_risk" then "Risk" elif .aiVerdict == "context_dependent" then "Review" else "" end) | markdown_table_cell),
+    (dismiss_link($dashboard_url; $repo) | markdown_table_cell)
   ]
 | @tsv
