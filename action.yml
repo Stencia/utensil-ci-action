@@ -508,9 +508,6 @@ runs:
         FORMATTER_JQ="$ACTION_PATH/scripts/pr-comment-findings-table.jq"
         DASHBOARD_URL="${{ inputs.dashboard-url }}"
         DASHBOARD_URL="${DASHBOARD_URL%/}"
-        if [ -z "$DASHBOARD_URL" ]; then
-          DASHBOARD_URL="https://utensil.tools"
-        fi
 
         echo "has-actionable=false" >> $GITHUB_OUTPUT
 

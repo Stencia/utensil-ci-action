@@ -86,6 +86,7 @@ Requirements:
 - delete a stale prior comment when a later upload-backed response is clean
 - render finding labels in human-readable form
 - include a per-finding dashboard `Dismiss` link for actionable code-pattern findings, carrying repo, rule, file, and line context in the URL
+- use `/my-repos` dismiss deep links with `repo`, `dismissRule`, `dismissFile`, and `dismissLine` query parameters; omit file and line when location data is unavailable
 - treat comment rendering or posting failures as non-fatal once an upload response exists
 
 The Action does not perform server-side semantic AI evaluation itself. It posts the information available through the report and upload response.
