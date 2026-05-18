@@ -94,10 +94,17 @@
 - Keep non-finding merge blockers distinct: draft status, failing or pending CI, merge conflicts, and missing approvals are merge blockers, not review findings. Report them separately as blockers; do not let them change the finding count or hide reviewable issues.
 - Say a PR is ready to merge only when no review findings remain and no known merge blockers remain.
 
+## PR Merge Guardrail
+
+- Do not merge a pull request, enable auto-merge, or otherwise land a PR unless the user explicitly asks to merge that specific PR in the current conversation.
+- Treat `go`, `implement`, `yes`, `ship`, `address feedback`, `converge`, and similar implementation or review-loop requests as authorization to create or update the PR, push fixes, run checks, and report readiness only. They are not merge authorization.
+- If a generic skill or workflow says to merge once checks are clean, this repo-local guardrail overrides it. Stop after reporting the PR URL, review state, check state, and whether it appears ready to merge.
+- When the user does explicitly request a merge, re-check the live PR state, unresolved review threads, mergeability, and required checks immediately before merging.
+
 ## PR Creation Default
 
-- When the user says `go`, `implement`, `yes`, or otherwise authorizes tracked issue, epic, or planned work, treat that as authorization to carry the work through local verification, PR creation or update, and PR review convergence unless they explicitly say to stop before PR creation.
-- Do not stop at "implementation is done locally" for tracked work when the expected outcome is a landed PR. After relevant verification succeeds, create or update the PR instead of waiting for a separate prompt to do so.
+- When the user says `go`, `implement`, `yes`, or otherwise authorizes tracked issue, epic, or planned work, treat that as authorization to carry the work through local verification, PR creation or update, and PR review convergence unless they explicitly say to stop before PR creation. Do not merge the PR unless the PR Merge Guardrail is satisfied.
+- Do not stop at "implementation is done locally" for tracked work when the expected outcome is a review-ready PR. After relevant verification succeeds, create or update the PR instead of waiting for a separate prompt to do so.
 - Once the PR exists, continue the review-follow-up loop on the live PR head: gather review feedback, fix validated findings, rerun verification, push, and repeat until no actionable PR-attributable findings remain or the user redirects the work.
 
 ## CI Failure Reproduction
