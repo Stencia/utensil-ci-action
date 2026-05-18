@@ -13,6 +13,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: Run Codex hook tests
+        run: bash tests/test-codex-hooks.sh
       - name: Run parse-results tests
         run: bash tests/test-parse-results.sh
       - name: Run license-token diagnostics tests
