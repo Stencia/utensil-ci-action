@@ -97,6 +97,7 @@
 ## PR Merge Guardrail
 
 - Do not merge a pull request, enable auto-merge, or otherwise land a PR unless the user explicitly asks to merge that specific PR in the current conversation.
+- Treat the project-local Codex `PreToolUse` hook as the enforceable guardrail. `AGENTS.md` documents the rule; it is not the guardrail by itself.
 - Treat `go`, `implement`, `yes`, `ship`, `address feedback`, `converge`, and similar implementation or review-loop requests as authorization to create or update the PR, push fixes, run checks, and report readiness only. They are not merge authorization.
 - If a generic skill or workflow says to merge once checks are clean, this repo-local guardrail overrides it. Stop after reporting the PR URL, review state, check state, and whether it appears ready to merge.
 - When the user does explicitly request a merge, re-check the live PR state, unresolved review threads, mergeability, and required checks immediately before merging.
