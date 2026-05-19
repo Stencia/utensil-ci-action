@@ -108,6 +108,12 @@
 - Do not stop at "implementation is done locally" for tracked work when the expected outcome is a review-ready PR. After relevant verification succeeds, create or update the PR instead of waiting for a separate prompt to do so.
 - Once the PR exists, continue the review-follow-up loop on the live PR head: gather review feedback, fix validated findings, rerun verification, push, and repeat until no actionable PR-attributable findings remain or the user redirects the work.
 
+## Product Requirements in PR Description
+
+- For every PR that adds or changes a feature, the PR description must contain the product requirements the feature satisfies. Spell out the user-facing behavior, the problem it solves, and the acceptance criteria. A reader should understand the user-facing change without reading the diff.
+- Linking to an external PRD, feature doc, or tracked issue is encouraged, but the requirements must also appear inline in the PR description. A bare link or a code-summary description is not sufficient.
+- Bug fixes, refactors, dependency bumps, and docs-only changes are exempt unless they alter the user-facing contract.
+
 ## CI Failure Reproduction
 
 - When a GitHub Actions failure is specific to the Linux CLI workflow, reproduce and verify it in a Linux environment first.
