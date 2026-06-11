@@ -45,9 +45,9 @@ inputs:
     required: false
     default: 'false'
   upload-url:
-    description: 'Ingest endpoint URL'
+    description: 'Scan-report upload endpoint URL'
     required: false
-    default: 'https://api.utensil.tools/api/ingest'
+    default: 'https://api.utensil.tools/reports'
   dashboard-url:
     description: 'Utensil dashboard base URL used for PR comment links'
     required: false
