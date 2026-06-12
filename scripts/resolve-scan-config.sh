@@ -53,15 +53,19 @@ REPO_OWNER="${REPO_OWNER:-}"
 REPO_NAME="${REPO_NAME:-}"
 
 if [ "$FETCH_SCAN_CONFIG" = "true" ]; then
-  if [ -z "${UTENSIL_LICENSE_TOKEN:-}" ]; then
+  if [ -z "${UTENSIL_ACCESS_TOKEN:-}" ]; then
     CONFIG_FETCH_STATUS="skipped_no_token"
   elif ! is_allowed_scan_config_url "$SCAN_CONFIG_URL"; then
     CONFIG_FETCH_STATUS="skipped_untrusted_url"
   else
+    CONFIG_AUTH_HEADER=$(mktemp "${RUNNER_TEMP:-/tmp}/utensil-scan-config-auth-header.XXXXXX")
+    trap 'rm -f "$CONFIG_AUTH_HEADER"' EXIT
+    printf 'Authorization: Bearer %s\n' "$UTENSIL_ACCESS_TOKEN" > "$CONFIG_AUTH_HEADER"
+    chmod 600 "$CONFIG_AUTH_HEADER" 2>/dev/null || true
     CONFIG_RESPONSE="${RUNNER_TEMP:-/tmp}/utensil-scan-config.json"
     set +e
     CONFIG_HTTP_CODE=$("$CURL_BIN" -sS --max-time "$SCAN_CONFIG_TIMEOUT_SECONDS" -o "$CONFIG_RESPONSE" -w "%{http_code}" \
-      -H "Authorization: Bearer $UTENSIL_LICENSE_TOKEN" \
+      -H @"$CONFIG_AUTH_HEADER" \
       "${SCAN_CONFIG_URL%/}/$REPO_OWNER/$REPO_NAME")
     CONFIG_CURL_EXIT=$?
     set -e

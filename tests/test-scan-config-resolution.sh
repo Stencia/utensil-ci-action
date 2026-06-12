@@ -69,7 +69,7 @@ run_resolver() {
   INPUT_NATIVE_RESOLVERS="${INPUT_NATIVE_RESOLVERS:-}" \
   REPO_OWNER="vyos" \
   REPO_NAME="vyos-1x" \
-  UTENSIL_LICENSE_TOKEN="${UTENSIL_LICENSE_TOKEN:-token}" \
+  UTENSIL_ACCESS_TOKEN="${UTENSIL_ACCESS_TOKEN:-access-token}" \
   "$ROOT/scripts/resolve-scan-config.sh"
 }
 
@@ -87,6 +87,11 @@ RESULT=$(run_resolver)
 [ "$(jq -r '.debianArch' <<< "$RESULT")" = "arm64" ] && pass "hosted arch fills unset input" || fail "hosted arch did not apply"
 [ "$(jq -r '.nativeResolversEnabled' <<< "$RESULT")" = "false" ] && pass "explicit native false wins" || fail "native false was overwritten"
 [ "$(jq -r '.scanTargetSource' <<< "$RESULT")" = "explicit" ] && pass "source is explicit" || fail "source was not explicit"
+if compgen -G "$TMPDIR/utensil-scan-config-auth-header.*" > /dev/null; then
+  fail "scan-config auth header file was not removed"
+else
+  pass "scan-config auth header file removed"
+fi
 
 echo ""
 echo "Missing hosted config:"

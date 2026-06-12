@@ -20,9 +20,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: Stencia/utensil-ci-action@main
         with:
-          license-token: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
+          license-key: ${{ secrets.UTENSIL_LICENSE_KEY }}
           upload: "true"
 ```
+
+Store a current Utensil license key in the `UTENSIL_LICENSE_KEY` repository secret. The older `license-token` input remains as a deprecated alias for compatibility, but its value must still be a current license key, not a legacy `UTENSIL_LICENSE_TOKEN`.
 
 ## Code composition analysis
 
@@ -33,7 +35,7 @@ Set `install-dependencies: 'false'` if your workflow installs dependencies separ
 ```yaml
       - uses: Stencia/utensil-ci-action@main
         with:
-          license-token: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
+          license-key: ${{ secrets.UTENSIL_LICENSE_KEY }}
           install-dependencies: 'false'
 ```
 
@@ -44,7 +46,7 @@ Tell Utensil what produced the code being scanned. The most common case is an AI
 ```yaml
       - uses: Stencia/utensil-ci-action@main
         with:
-          license-token: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
+          license-key: ${{ secrets.UTENSIL_LICENSE_KEY }}
           ai-provider: Anthropic
           ai-tool: Claude Code
           ai-model: claude-sonnet-4-5
@@ -62,7 +64,7 @@ For multiple entries per scan, custom structural fields, or a non-AI producer, p
 ```yaml
       - uses: Stencia/utensil-ci-action@main
         with:
-          license-token: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
+          license-key: ${{ secrets.UTENSIL_LICENSE_KEY }}
           authorship-provenance-json: >-
             [{"authorship":"human","sourceType":"workflowInstrumentation","evidenceType":"workflowAttributionSignal","attributionScope":"platform","evidenceStrength":"weak","provider":"Anthropic","tool":"Claude Code","model":"claude-sonnet-4-5","usedAgent":true}]
 ```
