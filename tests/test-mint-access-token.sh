@@ -71,6 +71,11 @@ MOCK_HTTP=200
 UTENSIL_LICENSE_KEY="license-key-123"
 TOKEN=$(run_helper)
 [ "$TOKEN" = "access-token-123" ] && pass "access token emitted" || fail "unexpected token: $TOKEN"
+if compgen -G "$TMPDIR/utensil-access-token-response.*" > /dev/null; then
+  fail "auth response file was not removed"
+else
+  pass "auth response file removed"
+fi
 
 echo ""
 echo "Missing license key:"

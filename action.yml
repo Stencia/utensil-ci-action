@@ -243,7 +243,9 @@ runs:
           ACCESS_TOKEN_EXIT=$?
           set -e
           if [ "$ACCESS_TOKEN_EXIT" -eq 0 ] && [ -n "$UTENSIL_ACCESS_TOKEN" ]; then
-            export UTENSIL_ACCESS_TOKEN
+            echo "::add-mask::$UTENSIL_ACCESS_TOKEN"
+            SCAN_CONFIG_ACCESS_TOKEN="$UTENSIL_ACCESS_TOKEN"
+            unset UTENSIL_ACCESS_TOKEN
           else
             ACCESS_TOKEN_SUMMARY=$(head -n 5 "$ACCESS_TOKEN_STDERR" 2>/dev/null | sed '/^[[:space:]]*$/d' || true)
             ACCESS_TOKEN_SUMMARY=$(normalize_ws "$ACCESS_TOKEN_SUMMARY")
@@ -254,7 +256,12 @@ runs:
             fi
           fi
         fi
-        CONFIG_JSON="$("$ACTION_PATH/scripts/resolve-scan-config.sh")"
+        if [ -n "${SCAN_CONFIG_ACCESS_TOKEN:-}" ]; then
+          CONFIG_JSON="$(UTENSIL_ACCESS_TOKEN="$SCAN_CONFIG_ACCESS_TOKEN" "$ACTION_PATH/scripts/resolve-scan-config.sh")"
+          unset SCAN_CONFIG_ACCESS_TOKEN
+        else
+          CONFIG_JSON="$("$ACTION_PATH/scripts/resolve-scan-config.sh")"
+        fi
         EFFECTIVE_DEBIAN_SUITE=$(jq -r '.debianSuite // empty' <<< "$CONFIG_JSON")
         EFFECTIVE_DEBIAN_ARCH=$(jq -r '.debianArch // empty' <<< "$CONFIG_JSON")
         EFFECTIVE_NATIVE_RESOLVERS=$(jq -r 'if .nativeResolversEnabled == true then "true" else "false" end' <<< "$CONFIG_JSON")
@@ -498,6 +505,11 @@ runs:
           fi
           exit 0
         fi
+        echo "::add-mask::$UTENSIL_ACCESS_TOKEN"
+        UPLOAD_AUTH_HEADER=$(mktemp "${{ runner.temp }}/utensil-upload-auth-header.XXXXXX")
+        trap 'rm -f "$UPLOAD_AUTH_HEADER"' EXIT
+        printf 'Authorization: Bearer %s\n' "$UTENSIL_ACCESS_TOKEN" > "$UPLOAD_AUTH_HEADER"
+        chmod 600 "$UPLOAD_AUTH_HEADER" 2>/dev/null || true
         PAYLOAD="${{ runner.temp }}/utensil-upload.json"
         RESPONSE_PATH="${{ runner.temp }}/utensil-ingest-response.json"
         jq --arg repo "${{ github.repository }}" \
@@ -514,9 +526,12 @@ runs:
         HTTP_CODE=$(curl -sS -o "$RESPONSE_PATH" -w "%{http_code}" \
           -X POST "${{ inputs.upload-url }}" \
           -H "Content-Type: application/json" \
-          -H "Authorization: Bearer $UTENSIL_ACCESS_TOKEN" \
+          -H @"$UPLOAD_AUTH_HEADER" \
           --data-binary @"$PAYLOAD")
         CURL_EXIT=$?
+        rm -f "$UPLOAD_AUTH_HEADER"
+        trap - EXIT
+        unset UTENSIL_ACCESS_TOKEN
         set -e
 
         if [ $CURL_EXIT -ne 0 ] || [ -z "$HTTP_CODE" ]; then

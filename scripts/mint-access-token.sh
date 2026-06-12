@@ -23,7 +23,8 @@ if ! is_allowed_auth_token_url "$AUTH_TOKEN_URL"; then
   exit 2
 fi
 
-RESPONSE_PATH="${RUNNER_TEMP:-/tmp}/utensil-access-token-response.json"
+RESPONSE_PATH=$(mktemp "${RUNNER_TEMP:-/tmp}/utensil-access-token-response.XXXXXX")
+trap 'rm -f "$RESPONSE_PATH"' EXIT
 set +e
 HTTP_CODE=$("$CURL_BIN" -sS --max-time "$AUTH_TIMEOUT_SECONDS" -o "$RESPONSE_PATH" -w "%{http_code}" \
   -X POST "${AUTH_TOKEN_URL%/}" \
