@@ -17,8 +17,10 @@ jobs:
         run: bash tests/test-codex-hooks.sh
       - name: Run parse-results tests
         run: bash tests/test-parse-results.sh
-      - name: Run license-token diagnostics tests
+      - name: Run license-key diagnostics tests
         run: bash tests/test-license-token-diagnostics.sh
+      - name: Run access-token mint tests
+        run: bash tests/test-mint-access-token.sh
       - name: Run PR comment format tests
         run: bash tests/test-pr-comment-format.sh
       - name: Run PR comment warning-path tests
@@ -39,13 +41,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Require Utensil license token
+      - name: Require Utensil license key
         if: ${{ env.CAN_RUN_LICENSED_TEST == 'true' }}
         env:
-          UTENSIL_LICENSE_TOKEN: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
+          UTENSIL_LICENSE_KEY: ${{ secrets.UTENSIL_LICENSE_KEY }}
         run: |
-          if [ -z "$UTENSIL_LICENSE_TOKEN" ]; then
-            echo "::error::UTENSIL_LICENSE_TOKEN is not configured for this repository."
+          if [ -z "$UTENSIL_LICENSE_KEY" ]; then
+            echo "::error::UTENSIL_LICENSE_KEY is not configured for this repository."
             exit 1
           fi
 
@@ -53,7 +55,7 @@ jobs:
         if: ${{ env.CAN_RUN_LICENSED_TEST == 'true' }}
         uses: ./
         with:
-          license-token: ${{ secrets.UTENSIL_LICENSE_TOKEN }}
+          license-key: ${{ secrets.UTENSIL_LICENSE_KEY }}
           fail-on: critical
 
       - name: Skip licensed test for forked pull requests

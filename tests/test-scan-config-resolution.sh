@@ -69,7 +69,7 @@ run_resolver() {
   INPUT_NATIVE_RESOLVERS="${INPUT_NATIVE_RESOLVERS:-}" \
   REPO_OWNER="vyos" \
   REPO_NAME="vyos-1x" \
-  UTENSIL_LICENSE_TOKEN="${UTENSIL_LICENSE_TOKEN:-token}" \
+  UTENSIL_ACCESS_TOKEN="${UTENSIL_ACCESS_TOKEN:-access-token}" \
   "$ROOT/scripts/resolve-scan-config.sh"
 }
 
