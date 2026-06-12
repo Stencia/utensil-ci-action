@@ -18,13 +18,20 @@ cat > "$MOCK_CURL" <<'MOCK'
 set -euo pipefail
 
 out=""
+data_file=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -o)
       out="$2"
       shift 2
       ;;
-    -w|--max-time|-H|--data-urlencode)
+    --data)
+      case "${2:-}" in
+        @*) data_file="${2#@}" ;;
+      esac
+      shift 2
+      ;;
+    -w|--max-time|-H)
       shift 2
       ;;
     -sS|-X)
@@ -35,6 +42,10 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+if [ -n "$data_file" ]; then
+  cat "$data_file" > "$MOCK_REQUEST_BODY_CAPTURE"
+fi
 
 printf '%s\n' "called" >> "$MOCK_CURL_COUNT"
 case "${MOCK_HTTP:-200}" in
@@ -57,6 +68,7 @@ run_helper() {
   RUNNER_TEMP="$TMPDIR" \
   CURL_BIN="$MOCK_CURL" \
   MOCK_CURL_COUNT="$TMPDIR/curl-count" \
+  MOCK_REQUEST_BODY_CAPTURE="$TMPDIR/request-body" \
   MOCK_HTTP="${MOCK_HTTP:-200}" \
   UTENSIL_LICENSE_KEY="${UTENSIL_LICENSE_KEY-}" \
   UTENSIL_AUTH_TOKEN_URL="${UTENSIL_AUTH_TOKEN_URL-}" \
@@ -68,9 +80,17 @@ echo ""
 
 echo "Successful exchange:"
 MOCK_HTTP=200
-UTENSIL_LICENSE_KEY="license-key-123"
+UTENSIL_LICENSE_KEY="license+key/with=chars.abc"
 TOKEN=$(run_helper)
 [ "$TOKEN" = "access-token-123" ] && pass "access token emitted" || fail "unexpected token: $TOKEN"
+grep -q "grant_type=client_credentials" "$TMPDIR/request-body" && pass "grant type posted" || fail "grant type missing"
+grep -q "client_id=license%2Bkey%2Fwith%3Dchars.abc" "$TMPDIR/request-body" && pass "client id encoded in request body" || fail "client id not encoded"
+grep -q "client_secret=license%2Bkey%2Fwith%3Dchars.abc" "$TMPDIR/request-body" && pass "client secret encoded in request body" || fail "client secret not encoded"
+if compgen -G "$TMPDIR/utensil-access-token-request.*" > /dev/null; then
+  fail "auth request file was not removed"
+else
+  pass "auth request file removed"
+fi
 if compgen -G "$TMPDIR/utensil-access-token-response.*" > /dev/null; then
   fail "auth response file was not removed"
 else

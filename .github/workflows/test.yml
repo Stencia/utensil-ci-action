@@ -18,7 +18,7 @@ jobs:
       - name: Run parse-results tests
         run: bash tests/test-parse-results.sh
       - name: Run license-key diagnostics tests
-        run: bash tests/test-license-token-diagnostics.sh
+        run: bash tests/test-license-key-diagnostics.sh
       - name: Run access-token mint tests
         run: bash tests/test-mint-access-token.sh
       - name: Run PR comment format tests

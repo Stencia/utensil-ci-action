@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Unit tests for the CI license-key diagnostics used by action.yml.
 #
-# Run: bash tests/test-license-token-diagnostics.sh
+# Run: bash tests/test-license-key-diagnostics.sh
 
 set -euo pipefail
 

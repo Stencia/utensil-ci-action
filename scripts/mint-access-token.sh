@@ -9,6 +9,29 @@ is_allowed_auth_token_url() {
   esac
 }
 
+form_urlencode() {
+  local input="$1"
+  local char encoded hex
+  local i
+  local LC_ALL=C
+
+  encoded=""
+  for ((i = 0; i < ${#input}; i++)); do
+    char="${input:i:1}"
+    case "$char" in
+      [a-zA-Z0-9.~_-])
+        encoded+="$char"
+        ;;
+      *)
+        printf -v hex '%%%02X' "'$char"
+        encoded+="$hex"
+        ;;
+    esac
+  done
+
+  printf '%s' "$encoded"
+}
+
 CURL_BIN="${CURL_BIN:-curl}"
 AUTH_TOKEN_URL="${UTENSIL_AUTH_TOKEN_URL:-https://auth.utensil.tools/token}"
 AUTH_TIMEOUT_SECONDS="${UTENSIL_AUTH_TIMEOUT_SECONDS:-10}"
@@ -23,15 +46,23 @@ if ! is_allowed_auth_token_url "$AUTH_TOKEN_URL"; then
   exit 2
 fi
 
+ENCODED_LICENSE_KEY=$(form_urlencode "$UTENSIL_LICENSE_KEY")
+REQUEST_BODY_PATH=$(mktemp "${RUNNER_TEMP:-/tmp}/utensil-access-token-request.XXXXXX")
 RESPONSE_PATH=$(mktemp "${RUNNER_TEMP:-/tmp}/utensil-access-token-response.XXXXXX")
-trap 'rm -f "$RESPONSE_PATH"' EXIT
+trap 'rm -f "$REQUEST_BODY_PATH" "$RESPONSE_PATH"' EXIT
+chmod 600 "$REQUEST_BODY_PATH" "$RESPONSE_PATH" 2>/dev/null || true
+
+{
+  printf 'grant_type=client_credentials'
+  printf '&client_id=%s' "$ENCODED_LICENSE_KEY"
+  printf '&client_secret=%s' "$ENCODED_LICENSE_KEY"
+} > "$REQUEST_BODY_PATH"
+
 set +e
 HTTP_CODE=$("$CURL_BIN" -sS --max-time "$AUTH_TIMEOUT_SECONDS" -o "$RESPONSE_PATH" -w "%{http_code}" \
   -X POST "${AUTH_TOKEN_URL%/}" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "grant_type=client_credentials" \
-  --data-urlencode "client_id=$UTENSIL_LICENSE_KEY" \
-  --data-urlencode "client_secret=$UTENSIL_LICENSE_KEY")
+  --data @"$REQUEST_BODY_PATH")
 CURL_EXIT=$?
 set -e
 
