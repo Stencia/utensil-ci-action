@@ -47,6 +47,10 @@
   - `utensil-web`
 - After resolving the local repo paths from the symlink inventory, read each repo's `origin` remote to map it to the corresponding GitHub repository before querying PRs or review feedback.
 
+## Epics
+
+**"Epic"** is our convention for a GitHub issue used as an umbrella over related child issues. GitHub itself only has "issues". An epic is just an issue that tracks the rest of a workstream. Anywhere these guidelines reference "epic," it means such an umbrella issue, and the issue-handling rules below apply to it.
+
 ## Epic Continuity
 
 - When the user asks "what's next" or says "next", first check whether there is an already-started epic, umbrella issue, or user-identified workstream that is still incomplete.
