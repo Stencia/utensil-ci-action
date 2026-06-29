@@ -276,12 +276,11 @@ def switch_branch_target(args: list[str]) -> str | None:
 
 
 def checkout_branch_target(args: list[str]) -> str | None:
-    if "--" in args:
-        return DEFAULT_BRANCH
-
     index = 0
     while index < len(args):
         token = args[index]
+        if token == "--":
+            return DEFAULT_BRANCH
         if token in ("-b", "-B", "--orphan"):
             return args[index + 1] if index + 1 < len(args) else None
         if token.startswith("--orphan="):
