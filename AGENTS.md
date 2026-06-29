@@ -47,6 +47,15 @@
   - `utensil-web`
 - After resolving the local repo paths from the symlink inventory, read each repo's `origin` remote to map it to the corresponding GitHub repository before querying PRs or review feedback.
 
+## Quick Product Answers
+
+- When the user asks how to install the latest Utensil app or CLI, answer from the main `Utensil` repo README first. The canonical macOS install command is:
+  ```sh
+  curl -fsSL https://desktop.utensil.tools/install.sh | sh
+  ```
+- In this checkout, the source of truth is `/Users/will/code/Utensil/README.md` under the `Install` heading. Do not start with public web search, GitHub release discovery, or CI action internals for this question.
+- If the user specifically asks for the current hosted version, then check `https://desktop.utensil.tools/latest.json` after giving the install command.
+
 ## Epic Continuity
 
 - When the user asks "what's next" or says "next", first check whether there is an already-started epic, umbrella issue, or user-identified workstream that is still incomplete.
