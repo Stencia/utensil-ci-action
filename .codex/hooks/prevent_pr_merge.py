@@ -21,6 +21,7 @@ GH_GLOBAL_OPTIONS_WITH_VALUES = {
     "--git-protocol",
 }
 SHELLS = {"bash", "sh", "zsh"}
+SHELL_SEPARATORS = {"&&", "||", ";", "|"}
 PULLS_MERGE_PATH = re.compile(r"(^|/)(pulls|pullRequests)/[0-9]+/merge($|[/?#])")
 GRAPHQL_MERGE_MUTATIONS = (
     "enablePullRequestAutoMerge",
@@ -66,14 +67,17 @@ def blocked_merge_reason(command: str, depth: int = 0) -> str | None:
         return None
 
     tokens = split_tokens(command)
-    if command_contains_graphql_merge(command):
-        return "GitHub GraphQL pull request merge mutation"
+    for segment in command_segments(tokens):
+        if merge_override_enabled(segment):
+            continue
+        if segment_contains_graphql_merge(segment):
+            return "GitHub GraphQL pull request merge mutation"
 
-    for index, token in enumerate(tokens):
-        if os.path.basename(token) == "gh":
-            reason = blocked_gh_reason(tokens, index)
-            if reason is not None:
-                return reason
+        for index, token in enumerate(segment):
+            if os.path.basename(token) == "gh":
+                reason = blocked_gh_reason(segment, index)
+                if reason is not None:
+                    return reason
 
     for inner_command in shell_inner_commands(tokens):
         reason = blocked_merge_reason(inner_command, depth + 1)
@@ -88,6 +92,45 @@ def split_tokens(command: str) -> list[str]:
         return shlex.split(command, posix=True)
     except ValueError:
         return command.split()
+
+
+def command_segments(tokens: list[str]) -> list[list[str]]:
+    segments: list[list[str]] = []
+    segment: list[str] = []
+    for token in tokens:
+        if token in SHELL_SEPARATORS:
+            if segment:
+                segments.append(segment)
+                segment = []
+            continue
+        segment.append(token)
+    if segment:
+        segments.append(segment)
+    return segments
+
+
+def merge_override_enabled(tokens: list[str]) -> bool:
+    index = 0
+    if index < len(tokens) and os.path.basename(tokens[index]) == "env":
+        index += 1
+        while index < len(tokens) and tokens[index].startswith("-"):
+            index += 1
+
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "CODEX_ALLOW_PR_MERGE=1":
+            return True
+        if is_env_assignment(token):
+            index += 1
+            continue
+        return False
+
+    return False
+
+
+def is_env_assignment(token: str) -> bool:
+    name, separator, _value = token.partition("=")
+    return bool(separator) and bool(name) and name.replace("_", "").isalnum() and not name[0].isdigit()
 
 
 def blocked_gh_reason(tokens: list[str], gh_index: int) -> str | None:
@@ -139,8 +182,8 @@ def has_pr_merge(tokens: list[str], index: int) -> bool:
     return False
 
 
-def command_contains_graphql_merge(command: str) -> bool:
-    return any(mutation in command for mutation in GRAPHQL_MERGE_MUTATIONS)
+def segment_contains_graphql_merge(tokens: list[str]) -> bool:
+    return any(mutation in token for mutation in GRAPHQL_MERGE_MUTATIONS for token in tokens)
 
 
 def shell_inner_commands(tokens: list[str]) -> list[str]:

@@ -99,8 +99,11 @@ assert_primary_blocks() {
 test_pr_merge_hook() {
   assert_allows 'gh pr create --draft --base main --head codex/example'
   assert_allows 'git merge feature/example'
+  assert_allows 'CODEX_ALLOW_PR_MERGE=1 gh pr merge 37'
+  assert_allows "bash -lc 'CODEX_ALLOW_PR_MERGE=1 gh pr merge 37'"
   assert_blocks 'gh pr merge 37'
   assert_blocks 'gh -R Stencia/utensil-ci-action pr merge 37 --auto'
+  assert_blocks 'CODEX_ALLOW_PR_MERGE=1 echo ok && gh pr merge 37'
   assert_blocks "bash -lc 'gh pr merge 37'"
   assert_blocks 'gh api repos/Stencia/utensil-ci-action/pulls/37/merge -X PUT'
   assert_blocks "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {}) { clientMutationId } }'"

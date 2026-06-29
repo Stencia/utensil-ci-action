@@ -116,6 +116,7 @@
 - Treat `go`, `implement`, `yes`, `ship`, `address feedback`, `converge`, and similar implementation or review-loop requests as authorization to create or update the PR, push fixes, run checks, and report readiness only. They are not merge authorization.
 - If a generic skill or workflow says to merge once checks are clean, this repo-local guardrail overrides it. Stop after reporting the PR URL, review state, check state, and whether it appears ready to merge.
 - When the user does explicitly request a merge, re-check the live PR state, unresolved review threads, mergeability, and required checks immediately before merging.
+- Authorized merge commands must include `CODEX_ALLOW_PR_MERGE=1` on the same simple command as the merge operation so the Codex hook can distinguish an explicitly approved merge from an accidental one.
 
 ## PR Creation Default
 
