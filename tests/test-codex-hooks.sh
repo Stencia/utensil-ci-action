@@ -119,7 +119,9 @@ test_primary_checkout_hook() {
   assert_primary_blocks 'git checkout codex/example'
   assert_primary_blocks 'git switch -c codex/new-topic'
   assert_primary_blocks 'git checkout -b codex/new-topic'
+  assert_primary_blocks 'git status && git switch codex/example'
   assert_primary_blocks "bash -lc 'git switch codex/example'"
+  assert_primary_blocks "bash -lc 'git status && git switch codex/example'"
   assert_primary_blocks "git -C '$PRIMARY' switch codex/example" "$ROOT"
   assert_primary_allows 'git switch codex/other' "$LINKED"
 

@@ -165,9 +165,20 @@ def parse_git_invocation(tokens: list[str], git_index: int, base_cwd: str) -> tu
         if token.startswith("-"):
             index += 1
             continue
-        return GitInvocation(token, command_args(tokens[index + 1:]), cwd), len(tokens)
+        return (
+            GitInvocation(token, command_args(tokens[index + 1:]), cwd),
+            next_command_index(tokens, index + 1),
+        )
 
     return None, index
+
+
+def next_command_index(tokens: list[str], index: int) -> int:
+    while index < len(tokens):
+        if tokens[index] in SHELL_SEPARATORS:
+            return index + 1
+        index += 1
+    return index
 
 
 def command_args(tokens: list[str]) -> list[str]:
