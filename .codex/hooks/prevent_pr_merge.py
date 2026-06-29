@@ -21,7 +21,7 @@ GH_GLOBAL_OPTIONS_WITH_VALUES = {
     "--git-protocol",
 }
 SHELLS = {"bash", "sh", "zsh"}
-SHELL_SEPARATORS = {"&&", "||", ";", "|"}
+SHELL_SEPARATORS = {"&&", "||", ";", "|", "&"}
 PULLS_MERGE_PATH = re.compile(r"(^|/)(pulls|pullRequests)/[0-9]+/merge($|[/?#])")
 GRAPHQL_MERGE_MUTATIONS = (
     "enablePullRequestAutoMerge",
@@ -89,7 +89,9 @@ def blocked_merge_reason(command: str, depth: int = 0) -> str | None:
 
 def split_tokens(command: str) -> list[str]:
     try:
-        return shlex.split(command, posix=True)
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|")
+        lexer.whitespace_split = True
+        return list(lexer)
     except ValueError:
         return command.split()
 

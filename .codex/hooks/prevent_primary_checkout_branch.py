@@ -33,7 +33,7 @@ CHECKOUT_OPTIONS_WITH_VALUES = {
     "--conflict",
     "--pathspec-from-file",
 }
-SHELL_SEPARATORS = {"&&", "||", ";", "|"}
+SHELL_SEPARATORS = {"&&", "||", ";", "|", "&"}
 
 
 @dataclass
@@ -107,7 +107,9 @@ def blocked_primary_checkout_reason(command: str, base_cwd: str, depth: int = 0)
 
 def split_tokens(command: str) -> list[str]:
     try:
-        return shlex.split(command, posix=True)
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|")
+        lexer.whitespace_split = True
+        return list(lexer)
     except ValueError:
         return command.split()
 
