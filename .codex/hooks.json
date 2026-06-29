@@ -6,6 +6,12 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/prevent_primary_checkout_branch.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking primary checkout worktree guardrail"
+          },
+          {
+            "type": "command",
             "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/prevent_pr_merge.py\"",
             "timeout": 10,
             "statusMessage": "Checking PR merge guardrail"

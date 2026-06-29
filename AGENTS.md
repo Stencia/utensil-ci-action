@@ -11,6 +11,21 @@
 - Treat the primary checkout as read-only for development work.
 - After a PR is merged, delete its worktree when no further work remains on that branch.
 
+## Primary Checkout Safeguards
+
+- The primary checkout must remain on `main`. Do not use `git switch`, `git checkout`, or branch-creation commands to put a feature branch in the primary checkout.
+- This repo includes a Codex `PreToolUse` guard at `.codex/hooks/prevent_primary_checkout_branch.py`. It blocks `git switch` and `git checkout` away from `main` when the command targets the primary checkout, including `git -C <path>` and simple shell-wrapped commands.
+- Install local git hooks from the primary checkout with `UTENSIL_PRIMARY_CHECKOUT=current scripts/install-git-hooks.sh`. This sets `core.hooksPath` and records `utensil.primaryCheckout`, which the git hooks and Codex hook use as the explicit primary-checkout path.
+- The Codex guard also falls back to the first entry in `git worktree list --porcelain` when `utensil.primaryCheckout` is not configured, but explicit config is preferred because it documents intent.
+- The only normal repo-affecting command to run in the primary checkout is `git pull --ff-only` on `main`, used to sync before creating a new worktree.
+- Standard branch setup:
+  1. In the primary checkout, run `git worktree list --porcelain` and `git branch --show-current`.
+  2. Confirm the primary checkout is on `main`, then run `git pull --ff-only`.
+  3. Create the branch in a linked worktree: `git worktree add /private/tmp/<repo>-<topic> -b codex/<topic> main`.
+  4. Move into the linked worktree and rerun `git worktree list --porcelain` and `git branch --show-current` before editing.
+- If the primary checkout is ever found on a non-`main` branch, stop and repair it before continuing. Verify the checkout is clean, switch the primary checkout back to `main`, create or identify a linked worktree for any branch that still matters, then rerun `git worktree list --porcelain` to prove the branch is no longer checked out in the primary checkout.
+- If the misplaced branch is already merged or intentionally abandoned, it does not need a preservation worktree. Verify that it is clean and no longer needed, switch the primary checkout back to `main`, and delete the stale branch only after confirming it is merged or explicitly disposable.
+
 ## Issue Assignment
 
 - Before starting work on any tracked GitHub issue, assign the issue to yourself.
